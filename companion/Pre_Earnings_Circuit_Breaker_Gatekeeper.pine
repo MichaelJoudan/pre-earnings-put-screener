@@ -1,0 +1,147 @@
+//@version=6
+indicator("Pre-Earnings Put — VIX Circuit Breaker & API Gatekeeper", shorttitle="PreEarn CB Gate", overlay=false)
+
+// ============================================================================
+// 1. STRATEGY CIRCUIT-BREAKER INPUTS (100% Exact Match to scanner_engine.py)
+// ============================================================================
+vix_spike_thresh  = input.float(24.0, "VIX 20-Day Stress Threshold", minval=15.0, maxval=45.0, step=0.5, group="Circuit-Breaker Rules")
+sma_fast_len      = input.int(10, "VIX Fast SMA Length (Days)", minval=2, maxval=30, group="Circuit-Breaker Rules")
+sma_slow_len      = input.int(30, "VIX Slow SMA Length (Days)", minval=10, maxval=90, group="Circuit-Breaker Rules")
+spike_lookback    = input.int(20, "VIX Spike Lookback Window (Days)", minval=5, maxval=60, group="Circuit-Breaker Rules")
+show_table        = input.bool(true, "Show API Gatekeeper HUD Table", group="Display")
+show_hi20_line    = input.bool(true, "Plot 20-Day VIX Rolling High", group="Display")
+
+// ============================================================================
+// 2. TRUE DAILY MACRO SERIES (Timeframe-Independent: Works on 5m, 1h, 1D, etc.)
+// ============================================================================
+f_vix_daily() =>
+    float c     = close
+    float sma_f = ta.sma(close, sma_fast_len)
+    float sma_s = ta.sma(close, sma_slow_len)
+    float hi_n  = ta.highest(close, spike_lookback)
+
+    // Exact VIX close today required to flip 10D SMA < 30D SMA
+    float sum_f_prev = math.sum(close[1], sma_fast_len - 1)
+    float sum_s_prev = math.sum(close[1], sma_slow_len - 1)
+    float ratio      = float(sma_slow_len) / float(sma_fast_len)
+    float denom      = ratio - 1.0
+    float req_vix    = denom > 0 ? (sum_s_prev - ratio * sum_f_prev) / denom : na
+
+    // Trading days remaining in 20D spike window once VIX <= threshold
+    int youngest_spike = -1
+    for k = 0 to spike_lookback - 1
+        if close[k] > vix_spike_thresh
+            youngest_spike := k
+            break
+    int days_to_calm = youngest_spike >= 0 ? (spike_lookback - youngest_spike) : 0
+    [c, sma_f, sma_s, hi_n, req_vix, days_to_calm]
+
+f_vix3m_daily() =>
+    float c3  = close
+    float lo  = ta.lowest(close, 252)
+    float hi  = ta.highest(close, 252)
+    float rnk = (hi > lo) ? 100.0 * (c3 - lo) / (hi - lo) : 50.0
+    [c3, rnk]
+
+f_spy_daily() =>
+    [close, ta.sma(close, 200)]
+
+[vix_close, vix_sma10, vix_sma30, vix_hi20, thaw_req_vix, days_to_calm] = request.security("CBOE:VIX", "1D", f_vix_daily(), lookahead=barmerge.lookahead_off)
+[vix3m_close, vix3m_ivr] = request.security("CBOE:VIX3M", "1D", f_vix3m_daily(), lookahead=barmerge.lookahead_off)
+[spy_close, spy_sma200]  = request.security("AMEX:SPY", "1D", f_spy_daily(), lookahead=barmerge.lookahead_off)
+tbill_3m_yield           = request.security("TVC:US03MY", "1D", close, lookahead=barmerge.lookahead_off, ignore_invalid_symbol=true)
+
+// ============================================================================
+// 3. EXACT CIRCUIT-BREAKER & REGIME CLASSIFICATION (scanner_engine.py L172-198)
+// ============================================================================
+bool spike_in_20d       = vix_hi20 > vix_spike_thresh
+bool is_circuit_breaker = spike_in_20d and (vix_sma10 >= vix_sma30)
+bool is_post_stress     = spike_in_20d and (vix_sma10 < vix_sma30)
+bool is_calm_harvest    = not spike_in_20d
+bool api_scrub_ready    = not is_circuit_breaker
+
+// State-transition triggers
+bool cb_just_cleared    = is_circuit_breaker[1] and api_scrub_ready
+bool cb_just_engaged    = not is_circuit_breaker[1] and is_circuit_breaker
+bool thaw_just_unlocked = not is_post_stress[1] and is_post_stress
+
+// Numeric regime state plot for external screening / alerts (0 = CB Blocked, 1 = Calm Core, 2 = Post-Stress Dual-Sleeve)
+float gate_state = is_circuit_breaker ? 0.0 : (is_post_stress ? 2.0 : 1.0)
+
+// ============================================================================
+// 4. VISUAL PLOTS, RIBBON & TRANSITION MARKERS
+// ============================================================================
+color bg_col = is_circuit_breaker ? color.new(#ef4444, 86) : is_post_stress ? color.new(#f59e0b, 86) : color.new(#14b8a6, 90)
+bgcolor(bg_col, title="Circuit-Breaker Regime Background")
+
+p_vix   = plot(vix_close, "VIX Close", color=color.new(#f8fafc, 0), linewidth=2)
+p_sma10 = plot(vix_sma10, "VIX 10D SMA (Fast)", color=color.new(#38bdf8, 0), linewidth=2)
+p_sma30 = plot(vix_sma30, "VIX 30D SMA (Slow)", color=color.new(#a855f7, 0), linewidth=2)
+plot(show_hi20_line ? vix_hi20 : na, "VIX 20D High", color=color.new(#fb7185, 45), linewidth=1, style=plot.style_stepline)
+plot(gate_state, "API Gate State (0=Blocked, 1=Calm, 2=Thaw)", display=display.data_window)
+plot(vix3m_ivr, "VIX3M 52W IV Rank (Cross-Compare Benchmark)", display=display.data_window)
+
+fill(p_sma10, p_sma30, color=vix_sma10 >= vix_sma30 ? color.new(#ef4444, 82) : color.new(#10b981, 82), title="10D vs 30D VIX Spread Fill")
+hline(vix_spike_thresh, "VIX Stress Threshold (24.0)", color=color.new(#f43f5e, 25), linestyle=hline.style_dashed, linewidth=1)
+
+plotshape(cb_just_cleared, title="Circuit Breaker CLEARED — Ping API", style=shape.labelup, location=location.bottom, color=color.new(#10b981, 0), textcolor=color.white, size=size.tiny, text="PING API")
+plotshape(cb_just_engaged, title="Circuit Breaker ENGAGED — Hold API", style=shape.labeldown, location=location.top, color=color.new(#ef4444, 0), textcolor=color.white, size=size.tiny, text="CB ON")
+
+// ============================================================================
+// 5. BUILT-IN TRADINGVIEW ALERTS
+// ============================================================================
+alertcondition(cb_just_cleared, title="1. Circuit Breaker CLEARED — Ping iVolatility API", message="Pre-Earnings Put Gatekeeper: Circuit Breaker has CLEARED! Open Screener & run live API scan.")
+alertcondition(thaw_just_unlocked, title="2. Post-Stress Thaw UNLOCKED (Dual-Sleeve <25 & >=50)", message="Pre-Earnings Put Gatekeeper: Post-Stress Volatility Thaw UNLOCKED (10D VIX < 30D VIX after >24 spike). Both Core (<25 IVR) & High-IVR (>=50) sleeves active!")
+alertcondition(cb_just_engaged, title="3. Circuit Breaker ENGAGED — Pause API Scrubbing", message="Pre-Earnings Put Gatekeeper: Active Market Stress Circuit Breaker ENGAGED (20D VIX > 24 & 10D >= 30D). Pause High-IVR API scrubbing.")
+
+// ============================================================================
+// 6. ON-CHART API GATEKEEPER & CROSS-COMPARE HUD TABLE
+// ============================================================================
+var table hud = table.new(position.top_right, 2, 8, border_width=1, border_color=color.new(#334155, 30))
+
+if barstate.islast and show_table
+    string gate_txt = is_circuit_breaker ? "HOLD — CIRCUIT BREAKER ACTIVE (SAVE API)" : is_post_stress ? "GO — PING API NOW (DUAL-SLEEVE UNLOCKED)" : "GO — SAFE TO PING API (CALM CORE SLEEVE)"
+    color  gate_bg  = is_circuit_breaker ? color.new(#dc2626, 10) : is_post_stress ? color.new(#d97706, 10) : color.new(#0d9488, 15)
+
+    string reg_txt  = is_circuit_breaker ? "PANIC CIRCUIT-BREAKER (20D Hi > 24 & 10D >= 30D)" : is_post_stress ? "POST-STRESS THAW (20D Hi > 24 & 10D < 30D)" : "CALM MARKET HARVEST (20D VIX Hi <= 24.0)"
+    string ivr_txt  = is_circuit_breaker ? "High-IVR (>=50) BLOCKED • Park Idle in 3M T-Bills" : is_post_stress ? "Pull Co. IVR90 < 25 (Core) AND >= 50 (Mean-Rev)" : "Pull Co. IVR90 < 25 Only (Skip 25–100)"
+    color  ivr_col  = is_circuit_breaker ? #fca5a5 : is_post_stress ? #fde68a : #5eead4
+
+    float  sma_diff = vix_sma10 - vix_sma30
+    string sma_sign = sma_diff >= 0 ? "+" : ""
+    string clear_txt = ""
+    if is_circuit_breaker
+        string req_part = (not na(thaw_req_vix) and thaw_req_vix > 0) ? ("VIX < " + str.tostring(thaw_req_vix, "#.##") + " today flips 10D < 30D") : ("Multi-day cool-off needed (Spread " + sma_sign + str.tostring(sma_diff, "#.##") + ")")
+        string calm_part = vix_close <= vix_spike_thresh ? (" | " + str.tostring(days_to_calm) + "d to exit 20D window") : " | VIX currently > 24"
+        clear_txt := req_part + calm_part
+    else if is_post_stress
+        clear_txt := "Cleared via Thaw (10D < 30D) • " + str.tostring(days_to_calm) + "d left in 20D window"
+    else
+        clear_txt := "Cleared (No >24.0 VIX close in past 20 trading days)"
+
+    bool spy_bull = spy_close >= spy_sma200
+    string spy_y_txt = "SPY $" + str.tostring(spy_close, "#.##") + (spy_bull ? " (> 200D)" : " (< 200D)") + (not na(tbill_3m_yield) ? (" • 3M T-Bill " + str.tostring(tbill_3m_yield, "#.##") + "%") : "")
+
+    table.cell(hud, 0, 0, "iVolatility API Gatekeeper", text_color=color.white, bgcolor=color.new(#0f172a, 10), text_size=size.small, text_halign=text.align_left)
+    table.cell(hud, 1, 0, gate_txt, text_color=color.white, bgcolor=gate_bg, text_size=size.small, text_halign=text.align_left)
+
+    table.cell(hud, 0, 1, "Macro Regime State", text_color=#cbd5e1, bgcolor=color.new(#0f172a, 20), text_size=size.small, text_halign=text.align_left)
+    table.cell(hud, 1, 1, reg_txt, text_color=color.white, bgcolor=color.new(#0f172a, 20), text_size=size.small, text_halign=text.align_left)
+
+    table.cell(hud, 0, 2, "Target Stock IVR90 Filter", text_color=#cbd5e1, bgcolor=color.new(#0f172a, 20), text_size=size.small, text_halign=text.align_left)
+    table.cell(hud, 1, 2, ivr_txt, text_color=ivr_col, bgcolor=color.new(#0f172a, 20), text_size=size.small, text_halign=text.align_left)
+
+    table.cell(hud, 0, 3, "VIX Spot | 20D High", text_color=#cbd5e1, bgcolor=color.new(#0f172a, 20), text_size=size.small, text_halign=text.align_left)
+    table.cell(hud, 1, 3, str.tostring(vix_close, "#.##") + "  |  20D Peak: " + str.tostring(vix_hi20, "#.##") + (spike_in_20d ? " (> 24.0 SPIKE)" : " (<= 24.0 CALM)"), text_color=spike_in_20d ? #fda4af : #6ee7b7, bgcolor=color.new(#0f172a, 20), text_size=size.small, text_halign=text.align_left)
+
+    table.cell(hud, 0, 4, "VIX 10D vs 30D SMA", text_color=#cbd5e1, bgcolor=color.new(#0f172a, 20), text_size=size.small, text_halign=text.align_left)
+    table.cell(hud, 1, 4, "10D: " + str.tostring(vix_sma10, "#.##") + "  vs  30D: " + str.tostring(vix_sma30, "#.##") + "  (" + sma_sign + str.tostring(sma_diff, "#.##") + ")", text_color=vix_sma10 >= vix_sma30 ? #fca5a5 : #6ee7b7, bgcolor=color.new(#0f172a, 20), text_size=size.small, text_halign=text.align_left)
+
+    table.cell(hud, 0, 5, "Unblock / Clear Condition", text_color=#cbd5e1, bgcolor=color.new(#0f172a, 20), text_size=size.small, text_halign=text.align_left)
+    table.cell(hud, 1, 5, clear_txt, text_color=color.white, bgcolor=color.new(#0f172a, 20), text_size=size.small, text_halign=text.align_left)
+
+    table.cell(hud, 0, 6, "Market 3M IV Benchmark", text_color=#cbd5e1, bgcolor=color.new(#0f172a, 20), text_size=size.small, text_halign=text.align_left)
+    table.cell(hud, 1, 6, "VIX3M: " + str.tostring(vix3m_close, "#.##") + "%  |  52W IVR: " + str.tostring(vix3m_ivr, "#.#") + " / 100 (Compare vs Stock IVR90)", text_color=#bae6fd, bgcolor=color.new(#0f172a, 20), text_size=size.small, text_halign=text.align_left)
+
+    table.cell(hud, 0, 7, "SPY & Collateral Yield", text_color=#cbd5e1, bgcolor=color.new(#0f172a, 10), text_size=size.small, text_halign=text.align_left)
+    table.cell(hud, 1, 7, spy_y_txt, text_color=#e2e8f0, bgcolor=color.new(#0f172a, 10), text_size=size.small, text_halign=text.align_left)

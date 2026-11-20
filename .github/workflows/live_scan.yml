@@ -1,36 +1,33 @@
-name: Pre-Earnings Screener — Live Scan & Deploy Pages
+name: Pre-Earnings Screener — Calendar Refresh & On-Demand Scan
 
 on:
   workflow_dispatch:
     inputs:
+      full_ivol_scan:
+        description: "Run full iVolatility API scan (set false to refresh only free Nasdaq/VIX calendar)"
+        required: false
+        default: "true"
+        type: string
       as_of_date:
-        description: "Optional YYYY-MM-DD override (leave empty for live NYSE today)"
+        description: "Optional YYYY-MM-DD override"
         required: false
         default: ""
         type: string
   schedule:
-    # US Market Trading Days (Mon–Fri): Open, Mid-Day, Pre-Close (Day -1 Exit / Day -20 Entry), and Post-Close EOD
-    - cron: "35 14 * * 1-5"
-    - cron: "0 18 * * 1-5"
-    - cron: "45 20 * * 1-5"
-    - cron: "30 23 * * 1-5"
-  push:
-    branches:
-      - main
+    # Daily schedule refreshes ONLY free Nasdaq earnings + VIX macro regime (0 iVolatility API calls!)
+    - cron: "35 13 * * 1-5"
+    - cron: "15 21 * * 1-5"
 
 permissions:
   contents: write
-  pages: write
-  id-token: write
 
 concurrency:
   group: pre-earnings-screener-live
   cancel-in-progress: false
 
 jobs:
-  scan:
-    name: Run Live iVolatility & Nasdaq Earnings Scan
-    if: github.event_name != 'push'
+  refresh:
+    name: Refresh Calendar (Zero iVol Quota on Schedule / Full Scan on Manual Trigger)
     runs-on: ubuntu-latest
     env:
       TZ: America/New_York
@@ -47,75 +44,30 @@ jobs:
           python-version: "3.12"
           cache: "pip"
 
-      - name: Restore iVolatility EOD cache
-        uses: actions/cache@v4
-        with:
-          path: ./cache
-          key: ivol-cache-${{ runner.os }}-${{ github.run_id }}
-          restore-keys: |
-            ivol-cache-${{ runner.os }}-
-
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Execute Portfolio Signal Scanner (reads ivol_credentials.json automatically)
+      - name: Refresh Free Nasdaq Calendar & VIX Regime (Scheduled — 0 iVolatility API Calls)
+        if: github.event_name == 'schedule' || inputs.full_ivol_scan == 'false'
+        run: |
+          python scripts/update_free_calendar.py
+
+      - name: Run Full On-Demand iVolatility Scan (Manual Dispatch Only)
+        if: github.event_name == 'workflow_dispatch' && inputs.full_ivol_scan != 'false'
         run: |
           python scripts/run_scan.py --as-of-date "${{ inputs.as_of_date }}"
 
-      - name: Prune empty placeholder cache entries before saving
-        run: |
-          mkdir -p ./cache
-          find ./cache -type f -name "*.csv.gz" -size -60c -delete || true
-
-      - name: Commit updated signals & calendar window to main
+      - name: Commit updated outputs to main
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add output/latest_signals.json output/latest_signals.csv output/nasdaq_earnings_window.json
+          git add output/
           if git diff --cached --quiet; then
-            echo "No changes in signal outputs."
+            echo "No changes in outputs."
           else
-            git commit -m "chore(signals): update live pre-earnings put signals [skip ci]"
+            git commit -m "chore(calendar): refresh pre-earnings calendar & regime [skip ci]"
             git pull --rebase origin main
             git push origin main
           fi
-
-  deploy-pages:
-    name: Deploy Online App to GitHub Pages
-    if: always() && (needs.scan.result == 'success' || needs.scan.result == 'skipped')
-    needs: scan
-    continue-on-error: true
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Checkout latest main branch
-        uses: actions/checkout@v4
-        with:
-          ref: main
-          fetch-depth: 1
-
-      - name: Assemble online app bundle
-        run: |
-          mkdir -p _site/output _site/reference_data _site/companion
-          cp index.html _site/index.html
-          cp .nojekyll _site/.nojekyll
-          cp ivol_credentials.json _site/ivol_credentials.json
-          cp reference_data/* _site/reference_data/
-          cp output/* _site/output/
-          cp companion/Pre_Earnings_Portfolio_Regime_Companion.pine _site/companion/Pre_Earnings_Portfolio_Regime_Companion.pine
-
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: "_site"
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
