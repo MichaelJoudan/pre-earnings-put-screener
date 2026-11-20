@@ -1,0 +1,13 @@
+# Python & environments
+__pycache__/
+*.py[cod]
+.venv*
+venv/
+env/
+
+# Never commit live credentials or transient caches
+ivol_credentials.json
+.env
+cache/
+_site/
+.DS_Store

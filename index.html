@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pre-Earnings Short 3M Put — Portfolio Signal Screener</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    .mono { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+    <!-- Top Header -->
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-slate-800 pb-5">
+      <div>
+        <div class="flex items-center gap-2.5 flex-wrap">
+          <span class="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">10Y Verified Strategy</span>
+          <span id="asOfBadge" class="text-xs text-slate-400 mono">Loading live signals...</span>
+        </div>
+        <h1 class="text-2xl font-bold tracking-tight text-white mt-1">Pre-Earnings Short 3-Month Put — Portfolio Signal Screener</h1>
+        <p class="text-sm text-slate-400 mt-0.5">US Common Equities &gt; $10B Market Cap &bull; Enter 20 Trading Days Before Earnings &bull; Exit 1 Trading Day Before Earnings</p>
+      </div>
+      <div class="flex flex-wrap items-center gap-2.5">
+        <select id="modeSelect" onchange="renderAll()" class="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500">
+          <option value="dual">Strategy Mode: Live Dual-Sleeve Calendar (+10.24% CAGR | 0.88 Sharpe)</option>
+          <option value="thaw_preview">Preview Mode: Post-Stress Thaw (Once 10D VIX &lt; 30D VIX)</option>
+          <option value="low_only">Strategy Mode: Strict Low-IVR &lt; 25 Only (+9.37% CAGR | 0.83 Sharpe)</option>
+          <option value="high_only">Strategy Mode: Single-Trade High-IVR &gt;= 50 (+1.12%/Trade)</option>
+          <option value="unfiltered">Strategy Mode: Unfiltered &gt; $10B Baseline (+7.66% CAGR)</option>
+        </select>
+        <button onclick="openPineModal()" class="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 transition">Pine v6 Companion</button>
+        <button onclick="openScanConfigModal()" class="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 transition">Cloud Scan Config</button>
+        <button onclick="exportCsv()" class="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 transition">Export CSV</button>
+        <button id="refreshBtn" onclick="triggerRefresh()" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white shadow transition flex items-center gap-2">
+          <span id="refreshSpinner" class="hidden animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full"></span>
+          <span id="refreshText">Run Fresh Live Scan</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Cloud Scan Settings Modal -->
+    <div id="scanConfigModal" class="hidden fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+      <div class="bg-slate-900 border border-slate-700 rounded-xl max-w-lg w-full p-5 space-y-4 shadow-2xl">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+          <h2 class="text-sm font-bold text-white">Online Live Scan &amp; GitHub Actions Dispatch</h2>
+          <button onclick="closeScanConfigModal()" class="text-slate-400 hover:text-white text-sm">&times;</button>
+        </div>
+        <div class="text-xs text-slate-300 space-y-2 leading-relaxed">
+          <p>
+            <span class="text-emerald-400 font-semibold">iVolatility Credentials Protected:</span>
+            API keys &amp; passwords run strictly inside encrypted <b>GitHub Actions Secrets</b> (<code class="text-indigo-300">IVOL_API_KEY</code>, <code class="text-indigo-300">IVOL_USERNAME</code>, <code class="text-indigo-300">IVOL_PASSWORD</code>) and are never exposed in the browser.
+          </p>
+          <p class="text-slate-400">
+            Scans run automatically every US trading day via GitHub Actions. To also trigger on-demand scans directly from the <b>Run Fresh Live Scan</b> button:
+          </p>
+        </div>
+        <div class="space-y-3 text-xs">
+          <div>
+            <label class="block text-slate-300 mb-1 font-medium">Option A — Open-Access Webhook Relay URL <span class="text-slate-500 font-normal">(Zero login for all visitors)</span></label>
+            <input id="inpRelayUrl" type="url" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 mono" placeholder="https://pre-earnings-scan-relay.<your-subdomain>.workers.dev" />
+            <p class="text-[11px] text-slate-500 mt-1">Deploy <code class="text-slate-400">cloudflare-worker/worker.js</code> once so anyone with the app URL can trigger scans without a token.</p>
+          </div>
+          <div class="border-t border-slate-800 pt-3">
+            <label class="block text-slate-300 mb-1 font-medium">Option B — GitHub Fine-Grained Token <span class="text-slate-500 font-normal">(Saved in this browser only)</span></label>
+            <input id="inpGhToken" type="password" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 mono" placeholder="github_pat_... (Actions: Read & Write)" />
+            <p class="text-[11px] text-slate-500 mt-1">Grant <code class="text-slate-400">Actions: Read &amp; write</code> (and <code class="text-slate-400">Contents: Read</code>) on <code class="text-slate-400" id="repoSlugLabel">MichaelJoudan/pre-earnings-put-screener</code>.</p>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800">
+          <a id="ghActionsDirectLink" href="https://github.com/MichaelJoudan/pre-earnings-put-screener/actions/workflows/live_scan.yml" target="_blank" rel="noopener noreferrer" class="text-xs text-indigo-400 hover:text-indigo-300 font-medium">Open GitHub Actions Runner &nearr;</a>
+          <div class="flex gap-2">
+            <button onclick="closeScanConfigModal()" class="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-300">Cancel</button>
+            <button onclick="saveScanConfig()" class="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white">Save &amp; Ready</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pine v6 Companion Modal -->
+    <div id="pineModal" class="hidden fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+      <div class="bg-slate-900 border border-slate-700 rounded-xl max-w-3xl w-full p-5 space-y-4 shadow-2xl">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+          <div>
+            <h2 class="text-sm font-bold text-white">TradingView Pine Script v6 — Portfolio Regime &amp; Timing Companion</h2>
+            <p class="text-xs text-slate-400 mt-0.5">Visual chart companion aligned with the 10-Year Verified Pre-Earnings Put Strategy</p>
+          </div>
+          <button onclick="closePineModal()" class="text-slate-400 hover:text-white text-sm">&times;</button>
+        </div>
+        <pre id="pineCodeBox" class="bg-slate-950 border border-slate-800 rounded-lg p-3.5 text-[11px] text-slate-300 mono overflow-auto max-h-96 leading-relaxed">Loading Pine Script...</pre>
+        <div class="flex justify-end gap-2">
+          <a href="./companion/Pre_Earnings_Portfolio_Regime_Companion.pine" download="Pre_Earnings_Portfolio_Regime_Companion.pine" class="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-200">Download .pine</a>
+          <button onclick="copyPineScript()" id="copyPineBtn" class="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white">Copy Pine Script</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Macro Regime Banner -->
+    <div id="regimeBanner" class="rounded-xl border p-4 bg-slate-900/90 border-slate-800"></div>
+
+    <!-- KPI Cards -->
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-3.5" id="kpiGrid"></div>
+
+    <!-- Parameter Controls -->
+    <div class="bg-slate-900/70 border border-slate-800 rounded-xl p-4 flex flex-wrap items-center justify-between gap-4 text-xs">
+      <div class="flex flex-wrap items-center gap-5">
+        <label class="flex items-center gap-2 text-slate-300">
+          Min Market Cap:
+          <select id="minMcapFilter" onchange="renderAll()" class="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-200 mono">
+            <option value="10">$10B+ (Mandate)</option>
+            <option value="25">$25B+ (Large-Cap)</option>
+            <option value="100">$100B+ (Mega-Cap)</option>
+            <option value="500">$500B+ (Titans)</option>
+          </select>
+        </label>
+        <label class="flex items-center gap-2 text-slate-300">
+          Max Half-Spread (% Spot):
+          <input id="maxSpreadInput" type="number" step="0.05" value="0.35" onchange="renderAll()" class="w-20 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-200 mono" />
+        </label>
+        <label class="flex items-center gap-2 text-slate-300">
+          Search Ticker:
+          <input id="searchTicker" type="text" placeholder="e.g. COST, NVDA" oninput="renderAll()" class="w-32 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-200 uppercase mono" />
+        </label>
+      </div>
+      <div class="text-slate-400">
+        Limit Price Target = <span class="text-slate-200 font-medium">Midpoint &minus; 25% of Half-Spread</span>
+      </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="border-b border-slate-800 flex flex-wrap gap-2" id="tabBar">
+      <button onclick="setTab('entries')" id="tab_entries" class="px-4 py-2.5 text-xs font-semibold border-b-2 border-indigo-500 text-indigo-400">1. Actionable Day -20 Entries</button>
+      <button onclick="setTab('exits')" id="tab_exits" class="px-4 py-2.5 text-xs font-semibold border-b-2 border-transparent text-slate-400 hover:text-slate-200">2. Mandatory Day -1 Exits</button>
+      <button onclick="setTab('watchlist')" id="tab_watchlist" class="px-4 py-2.5 text-xs font-semibold border-b-2 border-transparent text-slate-400 hover:text-slate-200">3. Upcoming Watchlist (Days -22 to -27)</button>
+      <button onclick="setTab('cohort')" id="tab_cohort" class="px-4 py-2.5 text-xs font-semibold border-b-2 border-transparent text-slate-400 hover:text-slate-200">4. Active Holding Cohort &amp; Filtered</button>
+    </div>
+
+    <!-- Table Container -->
+    <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg">
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse text-xs">
+          <thead id="tableHead" class="bg-slate-950/80 text-slate-400 uppercase tracking-wider border-b border-slate-800"></thead>
+          <tbody id="tableBody" class="divide-y divide-slate-800/70"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // =========================================================================
+    // REPOSITORY & ONLINE DISPATCH CONFIGURATION
+    // =========================================================================
+    const GITHUB_OWNER = 'MichaelJoudan';
+    const GITHUB_REPO = 'pre-earnings-put-screener';
+    const WORKFLOW_FILE = 'live_scan.yml';
+    // Optional public webhook relay URL (e.g. Cloudflare Worker) for zero-token open-access scan dispatch:
+    const DEFAULT_RELAY_URL = '';
+
+    let DATA = null;
+    let CURRENT_TAB = 'entries';
+    let HAS_PYTHON_BACKEND = null;
+
+    function detectRepoFromHost() {
+      const host = window.location.hostname;
+      if (host.endsWith('.github.io')) {
+        const owner = host.replace('.github.io', '');
+        const segs = window.location.pathname.split('/').filter(Boolean);
+        if (owner && segs.length > 0) {
+          return { owner, repo: segs[0] };
+        }
+      }
+      return { owner: GITHUB_OWNER, repo: GITHUB_REPO };
+    }
+
+    const REPO_INFO = detectRepoFromHost();
+    document.getElementById('repoSlugLabel').textContent = `${REPO_INFO.owner}/${REPO_INFO.repo}`;
+    document.getElementById('ghActionsDirectLink').href = `https://github.com/${REPO_INFO.owner}/${REPO_INFO.repo}/actions/workflows/${WORKFLOW_FILE}`;
+
+    function getRelayUrl() {
+      return (localStorage.getItem('screener_relay_url') || DEFAULT_RELAY_URL || '').trim().replace(/\/+$/, '');
+    }
+
+    function getGhToken() {
+      return (localStorage.getItem('screener_gh_token') || '').trim();
+    }
+
+    async function checkPythonBackend() {
+      if (HAS_PYTHON_BACKEND !== null) return HAS_PYTHON_BACKEND;
+      if (window.location.hostname.endsWith('.github.io')) {
+        HAS_PYTHON_BACKEND = false;
+        return false;
+      }
+      try {
+        const r = await fetch('/api/health', { cache: 'no-store' });
+        HAS_PYTHON_BACKEND = r.ok;
+      } catch (_) {
+        HAS_PYTHON_BACKEND = false;
+      }
+      return HAS_PYTHON_BACKEND;
+    }
+
+    async function fetchLatestSignalsJson() {
+      const candidates = [];
+      const bust = Date.now();
+
+      if (await checkPythonBackend()) {
+        try {
+          const resp = await fetch(`/api/signals?t=${bust}`, { cache: 'no-store' });
+          if (resp.ok) candidates.push(await resp.json());
+        } catch (_) {}
+      }
+
+      try {
+        const resp = await fetch(`./output/latest_signals.json?t=${bust}`, { cache: 'no-store' });
+        if (resp.ok) candidates.push(await resp.json());
+      } catch (_) {}
+
+      // If a GitHub token is stored (or repo is public), check live branch output for instant zero-CDN-lag updates
+      const tok = getGhToken();
+      try {
+        const headers = { 'Accept': 'application/vnd.github.raw+json' };
+        if (tok) headers['Authorization'] = `Bearer ${tok}`;
+        const ghUrl = `https://api.github.com/repos/${REPO_INFO.owner}/${REPO_INFO.repo}/contents/output/latest_signals.json?ref=main&t=${bust}`;
+        const gr = await fetch(ghUrl, { headers, cache: 'no-store' });
+        if (gr.ok) candidates.push(await gr.json());
+      } catch (_) {}
+
+      if (!candidates.length) {
+        throw new Error('Could not load output/latest_signals.json');
+      }
+      candidates.sort((a, b) => String(b.generated_at || '').localeCompare(String(a.generated_at || '')));
+      return candidates[0];
+    }
+
+    async function loadSignals() {
+      try {
+        const newest = await fetchLatestSignalsJson();
+        if (!DATA || newest.generated_at !== DATA.generated_at) {
+          DATA = newest;
+          renderAll();
+        }
+      } catch (err) {
+        console.error('Signal load error:', err);
+      }
+    }
+
+    function openScanConfigModal() {
+      document.getElementById('inpRelayUrl').value = getRelayUrl();
+      document.getElementById('inpGhToken').value = getGhToken();
+      document.getElementById('scanConfigModal').classList.remove('hidden');
+    }
+
+    function closeScanConfigModal() {
+      document.getElementById('scanConfigModal').classList.add('hidden');
+    }
+
+    function saveScanConfig() {
+      const relay = document.getElementById('inpRelayUrl').value.trim().replace(/\/+$/, '');
+      const tok = document.getElementById('inpGhToken').value.trim();
+      if (relay) localStorage.setItem('screener_relay_url', relay);
+      else localStorage.removeItem('screener_relay_url');
+      if (tok) localStorage.setItem('screener_gh_token', tok);
+      else localStorage.removeItem('screener_gh_token');
+      closeScanConfigModal();
+    }
+
+    async function openPineModal() {
+      document.getElementById('pineModal').classList.remove('hidden');
+      const box = document.getElementById('pineCodeBox');
+      if (box.dataset.loaded !== '1') {
+        try {
+          const r = await fetch('./companion/Pre_Earnings_Portfolio_Regime_Companion.pine', { cache: 'no-store' });
+          if (r.ok) {
+            box.textContent = await r.text();
+            box.dataset.loaded = '1';
+          } else {
+            box.textContent = 'Unable to load companion Pine script.';
+          }
+        } catch (e) {
+          box.textContent = 'Error loading Pine script: ' + e;
+        }
+      }
+    }
+
+    function closePineModal() {
+      document.getElementById('pineModal').classList.add('hidden');
+    }
+
+    async function copyPineScript() {
+      const txt = document.getElementById('pineCodeBox').textContent || '';
+      await navigator.clipboard.writeText(txt);
+      const btn = document.getElementById('copyPineBtn');
+      const orig = btn.textContent;
+      btn.textContent = 'Copied!';
+      setTimeout(() => { btn.textContent = orig; }, 1800);
+    }
+
+    function signalsToCsv(signals) {
+      if (!signals || !signals.length) return '';
+      const cols = Object.keys(signals[0]);
+      const esc = v => {
+        if (v === null || v === undefined) return '';
+        const s = String(v);
+        return (s.includes(',') || s.includes('"') || s.includes('\n')) ? '"' + s.replace(/"/g, '""') + '"' : s;
+      };
+      return [cols.join(','), ...signals.map(r => cols.map(c => esc(r[c])).join(','))].join('\n');
+    }
+
+    async function exportCsv() {
+      try {
+        const url = (await checkPythonBackend()) ? `/api/export.csv?t=${Date.now()}` : `./output/latest_signals.csv?t=${Date.now()}`;
+        const resp = await fetch(url, { cache: 'no-store' });
+        let blob;
+        if (resp.ok) {
+          blob = await resp.blob();
+        } else if (DATA && DATA.signals) {
+          blob = new Blob([signalsToCsv(DATA.signals)], { type: 'text/csv;charset=utf-8;' });
+        } else {
+          throw new Error('No CSV data available');
+        }
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'pre_earnings_put_signals.csv';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      } catch (err) {
+        alert('CSV export failed: ' + err.message);
+      }
+    }
+
+    const sleep = ms => new Promise(res => setTimeout(res, ms));
+
+    async function triggerRefresh() {
+      const btn = document.getElementById('refreshBtn');
+      const sp = document.getElementById('refreshSpinner');
+      const tx = document.getElementById('refreshText');
+      const prevStamp = DATA ? DATA.generated_at : '';
+
+      btn.disabled = true;
+      sp.classList.remove('hidden');
+      tx.textContent = 'Starting Live Scan...';
+
+      try {
+        // Mode 1: Cloud / Local Python Server Backend
+        if (await checkPythonBackend()) {
+          const r = await fetch('/api/refresh', { method: 'POST' });
+          if (!r.ok) throw new Error('Backend scan request failed');
+          const init = await r.json();
+          if (init.signals) {
+            DATA = init;
+            renderAll();
+            return;
+          }
+          for (let i = 0; i < 90; i++) {
+            await sleep(2000);
+            const sr = await fetch('/api/scan-status', { cache: 'no-store' });
+            const st = await sr.json();
+            tx.textContent = st.running ? `Scanning Market (${i * 2}s)...` : 'Loading Signals...';
+            if (!st.running) {
+              if (st.error) throw new Error(st.error);
+              await loadSignals();
+              return;
+            }
+          }
+          throw new Error('Timed out waiting for scan completion.');
+        }
+
+        // Mode 2: Open-Access Webhook Relay (Zero login for any visitor)
+        const relayUrl = getRelayUrl();
+        if (relayUrl) {
+          const tr = await fetch(`${relayUrl}/trigger`, { method: 'POST' });
+          const tj = await tr.json().catch(() => ({}));
+          if (!tr.ok) throw new Error(tj.error || `Relay returned HTTP ${tr.status}`);
+          for (let i = 0; i < 65; i++) {
+            await sleep(3000);
+            try {
+              const sr = await fetch(`${relayUrl}/status?t=${Date.now()}`, { cache: 'no-store' });
+              if (sr.ok) {
+                const st = await sr.json();
+                if (st.status === 'completed') {
+                  if (st.conclusion && st.conclusion !== 'success') {
+                    throw new Error(`Workflow finished with conclusion: ${st.conclusion}`);
+                  }
+                  tx.textContent = 'Publishing Signals...';
+                  for (let p = 0; p < 12; p++) {
+                    const fresh = await fetchLatestSignalsJson();
+                    if (fresh.generated_at !== prevStamp) {
+                      DATA = fresh;
+                      renderAll();
+                      return;
+                    }
+                    await sleep(3000);
+                  }
+                  await loadSignals();
+                  return;
+                }
+                tx.textContent = st.status === 'queued' ? 'Queued on GitHub...' : `Scanning Market (~${(i + 1) * 3}s)...`;
+              }
+            } catch (pollErr) {
+              if (String(pollErr.message).includes('conclusion')) throw pollErr;
+            }
+          }
+          await loadSignals();
+          return;
+        }
+
+        // Mode 3: Direct GitHub Actions workflow_dispatch via Fine-Grained Token
+        const ghToken = getGhToken();
+        if (ghToken) {
+          const dispatchTime = Date.now() - 5000;
+          const dispUrl = `https://api.github.com/repos/${REPO_INFO.owner}/${REPO_INFO.repo}/actions/workflows/${WORKFLOW_FILE}/dispatches`;
+          const dr = await fetch(dispUrl, {
+            method: 'POST',
+            headers: {
+              'Accept': 'application/vnd.github+json',
+              'Authorization': `Bearer ${ghToken}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ ref: 'main' })
+          });
+          if (!dr.ok) {
+            const errTxt = await dr.text();
+            throw new Error(`GitHub Actions dispatch failed (${dr.status}): ${errTxt}`);
+          }
+
+          tx.textContent = 'Queued on GitHub...';
+          for (let i = 0; i < 65; i++) {
+            await sleep(3000);
+            const runsUrl = `https://api.github.com/repos/${REPO_INFO.owner}/${REPO_INFO.repo}/actions/workflows/${WORKFLOW_FILE}/runs?per_page=3&t=${Date.now()}`;
+            const rr = await fetch(runsUrl, {
+              headers: {
+                'Accept': 'application/vnd.github+json',
+                'Authorization': `Bearer ${ghToken}`
+              },
+              cache: 'no-store'
+            });
+            if (rr.ok) {
+              const rj = await rr.json();
+              const latestRun = (rj.workflow_runs || []).find(w => Date.parse(w.created_at) >= dispatchTime);
+              if (latestRun) {
+                if (latestRun.status === 'completed') {
+                  if (latestRun.conclusion !== 'success') {
+                    throw new Error(`GitHub Action failed (${latestRun.conclusion}). Check Actions log.`);
+                  }
+                  tx.textContent = 'Fetching Fresh Signals...';
+                  await sleep(1500);
+                  DATA = await fetchLatestSignalsJson();
+                  renderAll();
+                  return;
+                }
+                tx.textContent = latestRun.status === 'queued'
+                  ? 'Waiting for Runner...'
+                  : `Scanning Live Market (${(i + 1) * 3}s)...`;
+              }
+            }
+          }
+          await loadSignals();
+          return;
+        }
+
+        // Fallback: Check if a newer scheduled scan is already online; otherwise prompt Cloud Scan Config
+        const checkLatest = await fetchLatestSignalsJson();
+        if (checkLatest.generated_at !== prevStamp) {
+          DATA = checkLatest;
+          renderAll();
+          return;
+        }
+        openScanConfigModal();
+      } catch (e) {
+        alert('Live scan error: ' + (e.message || e));
+      } finally {
+        btn.disabled = false;
+        sp.classList.add('hidden');
+        tx.textContent = 'Run Fresh Live Scan';
+      }
+    }
+
+    function setTab(t) {
+      CURRENT_TAB = t;
+      ['entries', 'exits', 'watchlist', 'cohort'].forEach(k => {
+        const el = document.getElementById('tab_' + k);
+        if (k === t) {
+          el.className = 'px-4 py-2.5 text-xs font-semibold border-b-2 border-indigo-500 text-indigo-400';
+        } else {
+          el.className = 'px-4 py-2.5 text-xs font-semibold border-b-2 border-transparent text-slate-400 hover:text-slate-200';
+        }
+      });
+      renderAll();
+    }
+
+    // =========================================================================
+    // EXACT STRATEGY EVALUATION & RENDERING LOGIC (100% PRESERVED)
+    // =========================================================================
+    function evaluateRowUnderMode(r, mode, maxSpread, macro, idleCap) {
+      if (r.window_bucket === 'EXIT_ALERT' || r.window_bucket === 'REACTING_TODAY') {
+        return { pass: true, badge: r.trading_days_to_reaction === 1 ? 'CLOSE TODAY AT EOD' : 'CLOSE NEXT SESSION', cls: 'bg-rose-500/20 text-rose-300 border-rose-500/40', weight: '0%' };
+      }
+      if (r.window_bucket === 'WATCHLIST_UPCOMING') {
+        const tag = r.ivr90 < 25 ? 'Core Low-IVR (<25)' : (r.ivr90 >= 50 ? 'High-IVR (>=50)' : 'Neutral IVR (25-50)');
+        return { pass: true, badge: 'WATCHLIST: ' + tag, cls: 'bg-sky-500/20 text-sky-300 border-sky-500/40', weight: 'Pending' };
+      }
+      if (r.window_bucket !== 'ENTRY_WINDOW') {
+        return { pass: false, badge: r.signal_label, cls: 'bg-slate-800 text-slate-400 border-slate-700', weight: '-' };
+      }
+
+      const hs = r.half_spread_pct != null ? r.half_spread_pct : 9.99;
+      const spreadOk = hs <= maxSpread;
+      let ivOk = false;
+      let sleeveName = '';
+
+      if (mode === 'dual') {
+        if (r.ivr90 < 25) { ivOk = true; sleeveName = 'CORE CALM (<25)'; }
+        else if (r.ivr90 >= 50 && macro.post_stress_high_ivr_enabled && idleCap > 0) { ivOk = true; sleeveName = 'POST-STRESS (>=50)'; }
+      } else if (mode === 'thaw_preview') {
+        if (r.ivr90 < 25) { ivOk = true; sleeveName = 'CORE CALM (<25)'; }
+        else if (r.ivr90 >= 50 && idleCap > 0) { ivOk = true; sleeveName = 'POST-STRESS PREVIEW (>=50)'; }
+      } else if (mode === 'low_only') {
+        if (r.ivr90 < 25) { ivOk = true; sleeveName = 'CORE LOW-IVR (<25)'; }
+      } else if (mode === 'high_only') {
+        if (r.ivr90 >= 50) { ivOk = true; sleeveName = 'HIGH-IVR (>=50)'; }
+      } else {
+        ivOk = true; sleeveName = 'UNFILTERED';
+      }
+
+      if (!ivOk) {
+        const why = r.ivr90 >= 50 ? 'BLOCKED — CIRCUIT-BREAKER (IVR >= 50)' : 'SKIP — DO NOT TRADE (IVR 25-50)';
+        return { pass: false, badge: why, cls: 'bg-slate-800 text-slate-400 border-slate-700', weight: '0% (Rejected)' };
+      }
+      if (!r.opt_matched) {
+        return { pass: false, badge: 'NO 90D OPTION QUOTE', cls: 'bg-slate-800 text-slate-400 border-slate-700', weight: '0%' };
+      }
+      if (!spreadOk) {
+        return { pass: true, caution: true, badge: 'LIMIT ONLY (' + sleeveName + ')', cls: 'bg-amber-500/20 text-amber-300 border-amber-500/40', weight: '5% (Strict Limit)' };
+      }
+      return { pass: true, caution: false, badge: 'SELL 3M PUT (' + sleeveName + ')', cls: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40', weight: '10% Cash-Secured' };
+    }
+
+    function renderAll() {
+      if (!DATA) return;
+      const m = DATA.macro_regime;
+      const cap = DATA.portfolio_capacity;
+      const mode = document.getElementById('modeSelect').value;
+      const minMcap = parseFloat(document.getElementById('minMcapFilter').value || '10');
+      const maxSpread = parseFloat(document.getElementById('maxSpreadInput').value || '0.35');
+      const q = (document.getElementById('searchTicker').value || '').trim().toUpperCase();
+
+      document.getElementById('asOfBadge').textContent = `Calendar Ref: ${m.as_of_date} | Option Quotes: ${DATA.signals[0]?.quote_date || m.vix_quote_date} | Updated: ${DATA.generated_at}`;
+
+      // Regime Banner
+      let bannerStyle = 'border-teal-500/40 bg-teal-950/30';
+      let pillStyle = 'bg-teal-500/20 text-teal-300 border-teal-500/40';
+      if (m.regime_code === 'PANIC_CIRCUIT_BREAKER') {
+        bannerStyle = 'border-rose-500/50 bg-rose-950/30';
+        pillStyle = 'bg-rose-500/20 text-rose-300 border-rose-500/40';
+      } else if (m.regime_code === 'POST_STRESS_THAW') {
+        bannerStyle = 'border-amber-500/50 bg-amber-950/25';
+        pillStyle = 'bg-amber-500/20 text-amber-300 border-amber-500/40';
+      }
+      document.getElementById('regimeBanner').className = `rounded-xl border p-4 ${bannerStyle}`;
+      document.getElementById('regimeBanner').innerHTML = `
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+          <div class="flex items-center gap-3 flex-wrap">
+            <span class="px-2.5 py-1 text-xs font-bold rounded-md border ${pillStyle}">${m.regime_label}</span>
+            <span class="text-xs text-slate-300 mono">VIX: <b>${m.vix_close}</b> (10D Avg ${m.vix_sma10} vs 30D Avg ${m.vix_sma30} | 20D High ${m.vix_high20}) &bull; VIX3M Rank: <b>${m.vix3m_ivr_52w}</b></span>
+          </div>
+          <div class="text-xs text-slate-300 mono">3M US Treasury Collateral Yield: <b class="text-emerald-300">${m.tbill_3m_yield_pct}%</b></div>
+        </div>
+        <p class="text-xs text-slate-300 mt-2 leading-relaxed">${m.regime_guidance}</p>
+      `;
+
+      // Filter base rows
+      const rows = DATA.signals.filter(r => r.market_cap_b >= minMcap && (!q || r.symbol.includes(q) || r.company_name.toUpperCase().includes(q)));
+      const entryRowsAll = rows.filter(r => r.window_bucket === 'ENTRY_WINDOW');
+      const evaluatedEntries = entryRowsAll.map(r => ({ r, ev: evaluateRowUnderMode(r, mode, maxSpread, m, cap.available_idle_capacity_pct) }));
+      const actionableCount = evaluatedEntries.filter(x => x.ev.pass && !x.ev.caution).length;
+      const limitCount = evaluatedEntries.filter(x => x.ev.pass && x.ev.caution).length;
+      const exitRows = rows.filter(r => r.window_bucket === 'EXIT_ALERT');
+      const watchRows = rows.filter(r => r.window_bucket === 'WATCHLIST_UPCOMING');
+
+      // KPI Grid
+      document.getElementById('kpiGrid').innerHTML = `
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5">
+          <div class="text-xs text-slate-400">Actionable Day -20 Entries</div>
+          <div class="text-2xl font-bold text-emerald-400 mono mt-1">${actionableCount} <span class="text-xs font-normal text-amber-300">(+${limitCount} Limit)</span></div>
+          <div class="text-[11px] text-slate-500 mt-0.5">Out of ${entryRowsAll.length} &gt;$${minMcap}B Day -20 names</div>
+        </div>
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5">
+          <div class="text-xs text-slate-400">Mandatory Day -1 / -2 Exits</div>
+          <div class="text-2xl font-bold text-rose-400 mono mt-1">${exitRows.length}</div>
+          <div class="text-[11px] text-slate-500 mt-0.5">Close before earnings reaction</div>
+        </div>
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5">
+          <div class="text-xs text-slate-400">Core Sleeve Occupancy</div>
+          <div class="text-2xl font-bold text-sky-400 mono mt-1">${cap.estimated_core_allocation_pct}% <span class="text-xs font-normal text-slate-400">(${cap.estimated_active_core_positions}/10 slots)</span></div>
+          <div class="text-[11px] text-slate-500 mt-0.5">${cap.available_idle_capacity_pct}% idle capacity available</div>
+        </div>
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5">
+          <div class="text-xs text-slate-400">Upcoming Watchlist (1–5d)</div>
+          <div class="text-2xl font-bold text-indigo-400 mono mt-1">${watchRows.length}</div>
+          <div class="text-[11px] text-slate-500 mt-0.5">Approaching Day -20 entry</div>
+        </div>
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5">
+          <div class="text-xs text-slate-400">10Y Strategy Benchmark</div>
+          <div class="text-2xl font-bold text-white mono mt-1">+10.24% <span class="text-xs font-normal text-emerald-400">0.88 Shp</span></div>
+          <div class="text-[11px] text-slate-500 mt-0.5">MaxDD -11.11% vs SPY -34.10%</div>
+        </div>
+      `;
+
+      document.getElementById('tab_entries').textContent = `1. Day -20 Entry Window (${entryRowsAll.length})`;
+      document.getElementById('tab_exits').textContent = `2. Mandatory Day -1 / -2 Exits (${exitRows.length})`;
+      document.getElementById('tab_watchlist').textContent = `3. Upcoming Watchlist (${watchRows.length})`;
+      document.getElementById('tab_cohort').textContent = `4. Active Cohort (${rows.filter(r => r.window_bucket === 'ACTIVE_COHORT').length})`;
+
+      const thead = document.getElementById('tableHead');
+      const tbody = document.getElementById('tableBody');
+
+      thead.innerHTML = `
+        <tr>
+          <th class="px-3.5 py-3">Signal Verdict</th>
+          <th class="px-3.5 py-3">Ticker &amp; Company</th>
+          <th class="px-3.5 py-3 text-right">Mkt Cap</th>
+          <th class="px-3.5 py-3">Earnings &amp; Session</th>
+          <th class="px-3.5 py-3 text-center">Countdown</th>
+          <th class="px-3.5 py-3 text-right">3M IV Rank (vs Norm)</th>
+          <th class="px-3.5 py-3">3-Month ATM Put Contract</th>
+          <th class="px-3.5 py-3 text-right">Bid / Ask / Limit(25%)</th>
+          <th class="px-3.5 py-3 text-right">Half-Spread</th>
+          <th class="px-3.5 py-3 text-right">Target Size</th>
+        </tr>
+      `;
+
+      let displayList = [];
+      if (CURRENT_TAB === 'entries') {
+        displayList = evaluatedEntries.sort((a, b) => (b.ev.pass - a.ev.pass) || ((a.ev.caution?1:0) - (b.ev.caution?1:0)) || (b.r.market_cap_b - a.r.market_cap_b));
+      } else if (CURRENT_TAB === 'exits') {
+        displayList = exitRows.map(r => ({ r, ev: evaluateRowUnderMode(r, mode, maxSpread, m, cap.available_idle_capacity_pct) }));
+      } else if (CURRENT_TAB === 'watchlist') {
+        displayList = watchRows.map(r => ({ r, ev: evaluateRowUnderMode(r, mode, maxSpread, m, cap.available_idle_capacity_pct) }));
+      } else {
+        displayList = rows.filter(r => r.window_bucket === 'ACTIVE_COHORT').map(r => ({ r, ev: { pass: true, badge: `HOLD (Exit ${r.scheduled_exit_date})`, cls: 'bg-slate-800 text-slate-300 border-slate-700', weight: r.ivr90 < 28 ? '10% Core' : '-' } }));
+      }
+
+      if (!displayList.length) {
+        tbody.innerHTML = `<tr><td colspan="10" class="px-4 py-8 text-center text-slate-500">No companies match the current filter in this tab.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = displayList.map(({ r, ev }) => {
+        const safeName = String(r.company_name || '').replace(/"/g, '&quot;');
+        const ivrColor = r.ivr90 < 25 ? 'text-teal-300 font-bold' : (r.ivr90 >= 50 ? 'text-amber-300 font-bold' : 'text-slate-300');
+        const hsColor = r.half_spread_pct != null ? (r.half_spread_pct <= maxSpread ? 'text-emerald-400' : 'text-amber-400') : 'text-slate-500';
+        const contractStr = r.opt_matched
+          ? `<div class="mono font-semibold text-slate-200">${r.expiration_date} $${r.strike}P <span class="text-slate-400 font-normal">(${r.dte}d)</span></div>
+             <div class="text-[11px] text-slate-400 mono">Spot $${r.spot_price} &bull; Credit ${r.entry_credit_pct}% &bull; &Delta; ${r.delta ?? '-'} &bull; OI ${r.opt_oi ?? 0}</div>`
+          : `<span class="text-slate-500">Spot $${r.spot_price} (Chain N/A)</span>`;
+        const quoteStr = r.opt_matched
+          ? `<div class="mono text-slate-300">$${r.bid?.toFixed(2) ?? '-'} / $${r.ask?.toFixed(2) ?? '-'}</div>
+             <div class="text-[11px] text-indigo-300 font-semibold mono">Sell Limit: $${r.limit_25_price?.toFixed(2)}</div>`
+          : `-`;
+        return `
+          <tr class="hover:bg-slate-800/40 transition">
+            <td class="px-3.5 py-3">
+              <span class="inline-block px-2.5 py-1 rounded border text-[11px] font-semibold ${ev.cls}">${ev.badge}</span>
+            </td>
+            <td class="px-3.5 py-3">
+              <div class="font-bold text-white mono">${r.symbol}</div>
+              <div class="text-[11px] text-slate-400 truncate max-w-[180px]" title="${safeName}">${safeName}</div>
+            </td>
+            <td class="px-3.5 py-3 text-right mono text-slate-200">$${r.market_cap_b.toFixed(1)}B</td>
+            <td class="px-3.5 py-3">
+              <div class="mono text-slate-200">${r.report_date} <span class="text-[11px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">${r.release_timing}</span></div>
+              <div class="text-[11px] text-slate-400 mono">Exit: ${r.scheduled_exit_date}</div>
+            </td>
+            <td class="px-3.5 py-3 text-center mono">
+              <span class="px-2 py-0.5 rounded bg-slate-800 text-slate-200 font-semibold">Day -${r.trading_days_to_reaction}</span>
+            </td>
+            <td class="px-3.5 py-3 text-right mono">
+              <div class="${ivrColor}">${r.ivr90.toFixed(1)}</div>
+              <div class="text-[11px] text-slate-400">Norm ${r.norm_ivr90_baseline} (${r.ivr90_excess_vs_norm >= 0 ? '+' : ''}${r.ivr90_excess_vs_norm})</div>
+            </td>
+            <td class="px-3.5 py-3">${contractStr}</td>
+            <td class="px-3.5 py-3 text-right">${quoteStr}</td>
+            <td class="px-3.5 py-3 text-right mono ${hsColor}">${r.half_spread_pct != null ? r.half_spread_pct.toFixed(2) + '%' : '-'}</td>
+            <td class="px-3.5 py-3 text-right mono font-medium text-slate-200">${ev.weight}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    loadSignals();
+    // Auto-check every 30s so scheduled/dispatched GitHub Actions scans update open browsers live
+    setInterval(loadSignals, 30000);
+  </script>
+</body>
+</html>

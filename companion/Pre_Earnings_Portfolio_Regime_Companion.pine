@@ -1,0 +1,105 @@
+//@version=6
+indicator("Pre-Earnings Put Strategy: Portfolio Regime & Timing Companion", shorttitle="PreEarn Put Regime", overlay=false)
+
+// ============================================================================
+// 1. USER INPUTS (Aligned with 10-Year Verified Portfolio-Calendar Strategy)
+// ============================================================================
+min_mcap_b        = input.float(10.0, "Minimum Market Cap ($ Billions)", minval=1.0, step=1.0)
+core_ivr_max      = input.float(25.0, "Core Calm-Sleeve Max Volatility Rank", minval=5.0, maxval=50.0, step=1.0)
+reversion_ivr_min = input.float(50.0, "Post-Stress Sleeve Min Volatility Rank", minval=30.0, maxval=90.0, step=1.0)
+vix_spike_thresh  = input.float(24.0, "VIX 20-Day Stress Threshold", minval=15.0, maxval=45.0, step=0.5)
+entry_td_min      = input.int(18, "Entry Window Min Trading Days to Earnings", minval=10, maxval=25)
+entry_td_max      = input.int(22, "Entry Window Max Trading Days to Earnings", minval=15, maxval=30)
+
+// ============================================================================
+// 2. PORTFOLIO-WIDE CALENDAR MACRO REGIME (CBOE:VIX & CBOE:VIX3M)
+// ============================================================================
+vix_close   = request.security("CBOE:VIX", "1D", close, lookahead=barmerge.lookahead_off)
+vix3m_close = request.security("CBOE:VIX3M", "1D", close, lookahead=barmerge.lookahead_off)
+
+vix_sma10   = ta.sma(vix_close, 10)
+vix_sma30   = ta.sma(vix_close, 30)
+vix_hi20    = ta.highest(vix_close, 20)
+
+vix3m_lo    = ta.lowest(vix3m_close, 252)
+vix3m_hi    = ta.highest(vix3m_close, 252)
+vix3m_rank  = (vix3m_hi > vix3m_lo) ? 100.0 * (vix3m_close - vix3m_lo) / (vix3m_hi - vix3m_lo) : 50.0
+
+bool is_panic_circuit_breaker = (vix_hi20 > vix_spike_thresh) and (vix_sma10 >= vix_sma30)
+bool is_post_stress_thaw      = (vix_hi20 > vix_spike_thresh) and (vix_sma10 < vix_sma30)
+
+// ============================================================================
+// 3. SINGLE-STOCK MARKET CAP, EARNINGS COUNTDOWN & HV90 RANK PROXY
+// Note: TradingView Pine does not expose single-stock 90D Option IV or ATM Put
+// Bid/Ask chains. HV90 Rank is plotted as a visual proxy; confirm exact 3M
+// Option IVR (ivr90) and ATM Put spread in the iVolatility Screening App.
+// ============================================================================
+tso_fq     = request.financial(syminfo.tickerid, "TOTAL_SHARES_OUTSTANDING", "FQ", ignore_invalid_symbol=true)
+mcap_b     = not na(tso_fq) ? (tso_fq * close) / 1e9 : na
+pass_mcap  = na(mcap_b) ? false : (mcap_b > min_mcap_b)
+
+log_ret    = math.log(close / close[1])
+hv63       = ta.stdev(log_ret, 63) * math.sqrt(252.0) * 100.0
+hv63_lo    = ta.lowest(hv63, 252)
+hv63_hi    = ta.highest(hv63, 252)
+hv90_rank  = (hv63_hi > hv63_lo) ? 100.0 * (hv63 - hv63_lo) / (hv63_hi - hv63_lo) : 50.0
+
+// Live Upcoming Earnings Countdown (via built-in earnings.future_time)
+int next_earn_ms     = earnings.future_time
+float cal_days_earn  = (not na(next_earn_ms) and next_earn_ms > time) ? (next_earn_ms - time) / 86400000.0 : na
+int est_trad_days    = not na(cal_days_earn) ? int(math.round(cal_days_earn * 5.0 / 7.0)) : na
+
+bool in_entry_window = not na(est_trad_days) and (est_trad_days >= entry_td_min) and (est_trad_days <= entry_td_max)
+bool in_exit_window  = not na(est_trad_days) and (est_trad_days <= 2) and (est_trad_days >= 0)
+
+bool proxy_core_ok   = pass_mcap and (hv90_rank < core_ivr_max) and not is_panic_circuit_breaker
+bool proxy_thaw_ok   = pass_mcap and is_post_stress_thaw and (hv90_rank >= reversion_ivr_min)
+bool chart_entry_sig = in_entry_window and (proxy_core_ok or proxy_thaw_ok)
+
+// ============================================================================
+// 4. PLOTS & VISUAL REGIME RIBBON
+// ============================================================================
+bgcolor(is_panic_circuit_breaker ? color.new(color.red, 88) : is_post_stress_thaw ? color.new(color.orange, 88) : color.new(color.teal, 92), title="Portfolio Calendar Macro Regime")
+
+plot(hv90_rank, "Stock 3M Realized Vol Rank Proxy (0-100)", color=color.new(color.blue, 0), linewidth=2)
+plot(vix3m_rank, "Market 3M Implied Vol Rank (CBOE:VIX3M)", color=color.new(color.orange, 15), linewidth=2)
+hline(core_ivr_max, "Core Calm Max Rank (25)", color=color.teal, linestyle=hline.style_dashed)
+hline(reversion_ivr_min, "Post-Stress Min Rank (50)", color=color.purple, linestyle=hline.style_dashed)
+
+plotshape(chart_entry_sig, title="T-20 Pre-Earnings Entry Window", style=shape.triangleup, location=location.bottom, color=color.lime, size=size.small, text="T-20")
+plotshape(in_exit_window, title="T-1 Pre-Earnings Mandatory Close", style=shape.xcross, location=location.top, color=color.red, size=size.small, text="T-1 EXIT")
+
+// ============================================================================
+// 5. AUDITOR-READY ON-CHART STATUS TABLE
+// ============================================================================
+var table dash = table.new(position.top_right, 2, 8, border_width=1, border_color=color.new(color.gray, 60))
+if barstate.islast
+    string reg_txt = is_panic_circuit_breaker ? "PANIC CIRCUIT-BREAKER (3M T-Bills)" : is_post_stress_thaw ? "POST-STRESS THAW (Core + High-IVR)" : "CALM HARVEST (Core Low-IVR < 25)"
+    color  reg_col = is_panic_circuit_breaker ? color.new(color.red, 15) : is_post_stress_thaw ? color.new(color.orange, 15) : color.new(color.teal, 15)
+
+    table.cell(dash, 0, 0, "Portfolio Macro Regime", text_color=color.white, bgcolor=color.new(color.black, 20), text_size=size.small)
+    table.cell(dash, 1, 0, reg_txt, text_color=color.white, bgcolor=reg_col, text_size=size.small)
+
+    table.cell(dash, 0, 1, "VIX (10D / 30D / 20D Hi)", text_color=color.white, bgcolor=color.new(color.black, 35), text_size=size.small)
+    table.cell(dash, 1, 1, str.tostring(vix_close, "#.##") + " (" + str.tostring(vix_sma10, "#.#") + " / " + str.tostring(vix_sma30, "#.#") + " / " + str.tostring(vix_hi20, "#.#") + ")", text_color=color.white, bgcolor=color.new(color.black, 35), text_size=size.small)
+
+    table.cell(dash, 0, 2, "Market Cap (> $10B Req)", text_color=color.white, bgcolor=color.new(color.black, 35), text_size=size.small)
+    table.cell(dash, 1, 2, (not na(mcap_b) ? "$" + str.tostring(mcap_b, "#.#") + "B" : "N/A") + (pass_mcap ? " [PASS]" : " [FAIL]"), text_color=pass_mcap ? color.lime : color.red, bgcolor=color.new(color.black, 35), text_size=size.small)
+
+    string earn_str = not na(next_earn_ms) ? str.format_time(next_earn_ms, "yyyy-MM-dd", syminfo.timezone) + " (~" + str.tostring(est_trad_days) + " Trading Days)" : "Unscheduled"
+    table.cell(dash, 0, 3, "Next Earnings Countdown", text_color=color.white, bgcolor=color.new(color.black, 35), text_size=size.small)
+    table.cell(dash, 1, 3, earn_str, text_color=in_entry_window ? color.lime : (in_exit_window ? color.orange : color.white), bgcolor=color.new(color.black, 35), text_size=size.small)
+
+    table.cell(dash, 0, 4, "Stock HV90 Rank (Proxy)", text_color=color.white, bgcolor=color.new(color.black, 35), text_size=size.small)
+    table.cell(dash, 1, 4, str.tostring(hv90_rank, "#.#") + " / 100 (Proxy Only)", text_color=color.white, bgcolor=color.new(color.black, 35), text_size=size.small)
+
+    table.cell(dash, 0, 5, "Market VIX3M IV Rank", text_color=color.white, bgcolor=color.new(color.black, 35), text_size=size.small)
+    table.cell(dash, 1, 5, str.tostring(vix3m_rank, "#.#") + " / 100", text_color=color.white, bgcolor=color.new(color.black, 35), text_size=size.small)
+
+    string act_txt = in_exit_window ? "MANDATORY CLOSE (T-1 EXIT)" : chart_entry_sig ? "CANDIDATE: CHECK 3M PUT IN APP" : in_entry_window ? "T-20 WINDOW (VOL FILTER HOLD)" : "WAIT FOR T-20 WINDOW"
+    color  act_col = in_exit_window ? color.new(color.red, 15) : chart_entry_sig ? color.new(color.green, 15) : color.new(color.gray, 40)
+    table.cell(dash, 0, 6, "Chart Timing Status", text_color=color.white, bgcolor=color.new(color.black, 20), text_size=size.small)
+    table.cell(dash, 1, 6, act_txt, text_color=color.white, bgcolor=act_col, text_size=size.small)
+
+    table.cell(dash, 0, 7, "Option Chain / True IVR90", text_color=color.yellow, bgcolor=color.new(color.black, 20), text_size=size.tiny)
+    table.cell(dash, 1, 7, "Verify 90D Put & Spread in Screener App", text_color=color.yellow, bgcolor=color.new(color.black, 20), text_size=size.tiny)

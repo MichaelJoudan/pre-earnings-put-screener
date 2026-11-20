@@ -1,0 +1,123 @@
+name: Pre-Earnings Screener — Live Scan & Deploy Pages
+
+on:
+  workflow_dispatch:
+    inputs:
+      as_of_date:
+        description: "Optional YYYY-MM-DD override (leave empty for live NYSE today)"
+        required: false
+        default: ""
+        type: string
+  schedule:
+    # US Market Trading Days (Mon–Fri): Open, Mid-Day, Pre-Close (Day -1 Exit / Day -20 Entry), and Post-Close EOD
+    - cron: "35 14 * * 1-5"
+    - cron: "0 18 * * 1-5"
+    - cron: "45 20 * * 1-5"
+    - cron: "30 23 * * 1-5"
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pre-earnings-screener-live
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    name: Run Live iVolatility & Nasdaq Earnings Scan
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    env:
+      TZ: America/New_York
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Restore iVolatility EOD cache
+        uses: actions/cache@v4
+        with:
+          path: ./cache
+          key: ivol-cache-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            ivol-cache-${{ runner.os }}-
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Execute Portfolio Signal Scanner
+        env:
+          IVOL_API_KEY: ${{ secrets.IVOL_API_KEY }}
+          IVOL_USERNAME: ${{ secrets.IVOL_USERNAME }}
+          IVOL_PASSWORD: ${{ secrets.IVOL_PASSWORD }}
+        run: |
+          python scripts/run_scan.py --as-of-date "${{ inputs.as_of_date }}"
+
+      - name: Prune empty placeholder cache entries before saving
+        run: |
+          mkdir -p ./cache
+          find ./cache -type f -name "*.csv.gz" -size -60c -delete || true
+
+      - name: Commit updated signals to main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add output/latest_signals.json output/latest_signals.csv
+          if git diff --cached --quiet; then
+            echo "No changes in signal outputs."
+          else
+            git commit -m "chore(signals): update live pre-earnings put signals [skip ci]"
+            git pull --rebase origin main
+            git push origin main
+          fi
+
+  deploy-pages:
+    name: Deploy Online App to GitHub Pages
+    if: always() && (needs.scan.result == 'success' || needs.scan.result == 'skipped')
+    needs: scan
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout latest main branch
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Assemble clean static web bundle
+        run: |
+          mkdir -p _site/output _site/companion
+          cp index.html _site/index.html
+          cp .nojekyll _site/.nojekyll
+          cp output/latest_signals.json _site/output/latest_signals.json
+          cp output/latest_signals.csv _site/output/latest_signals.csv
+          cp companion/Pre_Earnings_Portfolio_Regime_Companion.pine _site/companion/Pre_Earnings_Portfolio_Regime_Companion.pine
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: "_site"
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
