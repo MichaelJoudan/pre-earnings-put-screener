@@ -449,12 +449,15 @@
         authQuery = `apiKey=${encodeURIComponent(norm.api_key)}`;
       }
 
-      // Verify data entitlement with a lightweight uncached option quote check
+      // Verify data entitlement with a tiny 1-row option quote check
       const probeDate = DATA?.signals?.[0]?.quote_date || '2026-11-19';
-      const pr = await fetch(`https://restapi.ivolatility.com/equities/eod/stock-opts-by-param?symbol=AAPL&tradeDate=${probeDate}&dteFrom=80&dteTo=100&moneynessFrom=-2&moneynessTo=2&cp=P&region=USA&${authQuery}&_t=${Date.now()}`, { cache: 'no-store' });
+      const pr = await fetch(`https://restapi.ivolatility.com/equities/eod/stock-opts-by-param?symbol=AAPL&tradeDate=${probeDate}&dteFrom=85&dteTo=95&moneynessFrom=-1&moneynessTo=1&cp=P&region=USA&${authQuery}&_t=${Date.now()}`, { cache: 'no-store' });
       if (!pr.ok) {
         let detail = `HTTP ${pr.status}`;
         try { const j = await pr.json(); detail = j.message || detail; } catch (_) {}
+        if (String(detail).includes('Limit is not found')) {
+          throw new Error('This iVolatility account has 0 remaining API data quota ("Limit is not found"). Please enter a fresh account / API key.');
+        }
         throw new Error(`iVolatility API rejected credentials: ${detail}`);
       }
       return authQuery;
@@ -504,11 +507,6 @@
       try {
         const payload = readModalCredsPayload();
         await verifyCredentialsLive(payload);
-
-        const prev = await loadCredentials();
-        if (accountFingerprint(prev) !== accountFingerprint(payload)) {
-          FORCE_FRESH_NEXT_SCAN = true;
-        }
 
         localStorage.setItem('ivol_credentials_override', JSON.stringify(payload));
         rememberSavedAccount(payload);
@@ -856,7 +854,7 @@
     }
 
     async function fetchIvolSmdForDate(tradeDate, authQuery, acctTag, whitelistSet, onProgress) {
-      const cacheKey = `${acctTag}_smd_ALL_USA_${tradeDate}`;
+      const cacheKey = `smd_ALL_USA_${tradeDate}`;
       const cached = await idbGet(cacheKey);
       if (cached && Object.keys(cached).length > 500) {
         return cached;
@@ -869,6 +867,9 @@
       if (!resp.ok) {
         let msg = `HTTP ${resp.status}`;
         try { const j = await resp.json(); msg = j.message || msg; } catch (_) {}
+        if (String(msg).includes('Limit is not found')) {
+          throw new Error('QUOTA_EXHAUSTED: Current iVolatility account has 0 remaining API data quota ("Limit is not found"). Click "iVolatility" in the top bar to switch to another account.');
+        }
         throw new Error(`iVolatility SMD error: ${msg}`);
       }
 
@@ -936,7 +937,7 @@
 
       let rows = [];
       for (const qs of qCands) {
-        const cKey = `${acctTag}_opts_${qs}_${quoteDate}_55_135_-12_12_P`;
+        const cKey = `opts_${qs}_${quoteDate}_55_135_-12_12_P`;
         const cached = await idbGet(cKey);
         if (cached !== null) {
           rows = cached;
@@ -944,10 +945,15 @@
           await ivolThrottle();
           const u = `https://restapi.ivolatility.com/equities/eod/stock-opts-by-param?symbol=${encodeURIComponent(qs)}&tradeDate=${quoteDate}&dteFrom=55&dteTo=135&moneynessFrom=-12&moneynessTo=12&cp=P&region=USA&${authQuery}`;
           const r = await fetch(u, { cache: 'no-store' });
-          if (r.status === 401 || r.status === 403) {
+          if (r.status === 400 || r.status === 401 || r.status === 403) {
             let msg = `HTTP ${r.status}`;
             try { const j = await r.json(); msg = j.message || msg; } catch (_) {}
-            throw new Error(`iVolatility auth error: ${msg}`);
+            if (String(msg).includes('Limit is not found')) {
+              throw new Error('QUOTA_EXHAUSTED: Current iVolatility account exhausted its API data quota ("Limit is not found"). Switch accounts in the top bar to continue.');
+            }
+            if (r.status === 401 || r.status === 403) {
+              throw new Error(`iVolatility auth error: ${msg}`);
+            }
           }
           if (r.ok && r.status !== 204) {
             const j = await r.json();
@@ -1043,7 +1049,9 @@
 
       let smdMap = {};
       let smdDate = nyStr;
-      for (let offset = 0; offset < 8; offset++) {
+      const nyHour = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', hour12: false }).format(new Date()));
+      const startOffset = nyHour < 17 ? 1 : 0; // EOD ALL_USA only settles after 5:00 PM ET; skip unpublished today to save API calls
+      for (let offset = startOffset; offset < 8; offset++) {
         const candDt = addDaysUTC(todayDt, -offset);
         const wd = candDt.getUTCDay();
         if (wd === 0 || wd === 6) continue;
@@ -1172,7 +1180,8 @@
         try {
           optResults[c.symbol] = await fetchBest90dAtmPutBrowser(c.symbol, smdDate, c.spot_price, authQuery, acctTag);
         } catch (chainErr) {
-          if (String(chainErr.message || '').includes('auth error')) throw chainErr;
+          const em = String(chainErr.message || '');
+          if (em.includes('auth error') || em.includes('QUOTA_EXHAUSTED')) throw chainErr;
           optResults[c.symbol] = { opt_matched: false };
         }
       }
@@ -1293,7 +1302,12 @@
         }
         renderAll();
       } catch (e) {
-        alert('Live scan error: ' + (e.message || e));
+        const msg = String(e.message || e);
+        alert(msg.replace('QUOTA_EXHAUSTED: ', ''));
+        if (msg.includes('QUOTA_EXHAUSTED') || msg.includes('Limit is not found')) {
+          await openCredModal();
+          setModalStatus('✗ Current iVolatility account has 0 remaining API data quota ("Limit is not found"). Enter another iVolatility account below to switch.', true);
+        }
       } finally {
         btn.disabled = false;
         sp.classList.add('hidden');
