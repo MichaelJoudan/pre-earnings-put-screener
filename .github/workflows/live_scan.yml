@@ -60,11 +60,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Execute Portfolio Signal Scanner
-        env:
-          IVOL_API_KEY: ${{ secrets.IVOL_API_KEY }}
-          IVOL_USERNAME: ${{ secrets.IVOL_USERNAME }}
-          IVOL_PASSWORD: ${{ secrets.IVOL_PASSWORD }}
+      - name: Execute Portfolio Signal Scanner (reads ivol_credentials.json automatically)
         run: |
           python scripts/run_scan.py --as-of-date "${{ inputs.as_of_date }}"
 
@@ -73,11 +69,11 @@ jobs:
           mkdir -p ./cache
           find ./cache -type f -name "*.csv.gz" -size -60c -delete || true
 
-      - name: Commit updated signals to main
+      - name: Commit updated signals & calendar window to main
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add output/latest_signals.json output/latest_signals.csv
+          git add output/latest_signals.json output/latest_signals.csv output/nasdaq_earnings_window.json
           if git diff --cached --quiet; then
             echo "No changes in signal outputs."
           else
@@ -90,6 +86,7 @@ jobs:
     name: Deploy Online App to GitHub Pages
     if: always() && (needs.scan.result == 'success' || needs.scan.result == 'skipped')
     needs: scan
+    continue-on-error: true
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -101,13 +98,14 @@ jobs:
           ref: main
           fetch-depth: 1
 
-      - name: Assemble clean static web bundle
+      - name: Assemble online app bundle
         run: |
-          mkdir -p _site/output _site/companion
+          mkdir -p _site/output _site/reference_data _site/companion
           cp index.html _site/index.html
           cp .nojekyll _site/.nojekyll
-          cp output/latest_signals.json _site/output/latest_signals.json
-          cp output/latest_signals.csv _site/output/latest_signals.csv
+          cp ivol_credentials.json _site/ivol_credentials.json
+          cp reference_data/* _site/reference_data/
+          cp output/* _site/output/
           cp companion/Pre_Earnings_Portfolio_Regime_Companion.pine _site/companion/Pre_Earnings_Portfolio_Regime_Companion.pine
 
       - name: Configure GitHub Pages

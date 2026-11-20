@@ -17,7 +17,7 @@
       <div>
         <div class="flex items-center gap-2.5 flex-wrap">
           <span class="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">10Y Verified Strategy</span>
-          <span id="asOfBadge" class="text-xs text-slate-400 mono">Loading live signals...</span>
+          <span id="asOfBadge" class="text-xs text-slate-400 mono">Loading...</span>
         </div>
         <h1 class="text-2xl font-bold tracking-tight text-white mt-1">Pre-Earnings Short 3-Month Put — Portfolio Signal Screener</h1>
         <p class="text-sm text-slate-400 mt-0.5">US Common Equities &gt; $10B Market Cap &bull; Enter 20 Trading Days Before Earnings &bull; Exit 1 Trading Day Before Earnings</p>
@@ -31,7 +31,7 @@
           <option value="unfiltered">Strategy Mode: Unfiltered &gt; $10B Baseline (+7.66% CAGR)</option>
         </select>
         <button onclick="openPineModal()" class="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 transition">Pine v6 Companion</button>
-        <button onclick="openScanConfigModal()" class="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 transition">Cloud Scan Config</button>
+        <button onclick="openCredModal()" class="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 transition">iVolatility API Keys</button>
         <button onclick="exportCsv()" class="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 transition">Export CSV</button>
         <button id="refreshBtn" onclick="triggerRefresh()" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white shadow transition flex items-center gap-2">
           <span id="refreshSpinner" class="hidden animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full"></span>
@@ -40,40 +40,31 @@
       </div>
     </div>
 
-    <!-- Cloud Scan Settings Modal -->
-    <div id="scanConfigModal" class="hidden fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
-      <div class="bg-slate-900 border border-slate-700 rounded-xl max-w-lg w-full p-5 space-y-4 shadow-2xl">
+    <!-- Credentials Modal (Identical to Original App) -->
+    <div id="credModal" class="hidden fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+      <div class="bg-slate-900 border border-slate-700 rounded-xl max-w-md w-full p-5 space-y-4 shadow-2xl">
         <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-          <h2 class="text-sm font-bold text-white">Online Live Scan &amp; GitHub Actions Dispatch</h2>
-          <button onclick="closeScanConfigModal()" class="text-slate-400 hover:text-white text-sm">&times;</button>
+          <h2 class="text-sm font-bold text-white">Update iVolatility Credentials</h2>
+          <button onclick="closeCredModal()" class="text-slate-400 hover:text-white text-sm">&times;</button>
         </div>
-        <div class="text-xs text-slate-300 space-y-2 leading-relaxed">
-          <p>
-            <span class="text-emerald-400 font-semibold">iVolatility Credentials Protected:</span>
-            API keys &amp; passwords run strictly inside encrypted <b>GitHub Actions Secrets</b> (<code class="text-indigo-300">IVOL_API_KEY</code>, <code class="text-indigo-300">IVOL_USERNAME</code>, <code class="text-indigo-300">IVOL_PASSWORD</code>) and are never exposed in the browser.
-          </p>
-          <p class="text-slate-400">
-            Scans run automatically every US trading day via GitHub Actions. To also trigger on-demand scans directly from the <b>Run Fresh Live Scan</b> button:
-          </p>
-        </div>
+        <p class="text-xs text-slate-400 leading-relaxed">Pre-loaded from <code class="text-indigo-300">ivol_credentials.json</code>. Leave API Key blank if you want to authenticate strictly with Username &amp; Password.</p>
         <div class="space-y-3 text-xs">
           <div>
-            <label class="block text-slate-300 mb-1 font-medium">Option A — Open-Access Webhook Relay URL <span class="text-slate-500 font-normal">(Zero login for all visitors)</span></label>
-            <input id="inpRelayUrl" type="url" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 mono" placeholder="https://pre-earnings-scan-relay.<your-subdomain>.workers.dev" />
-            <p class="text-[11px] text-slate-500 mt-1">Deploy <code class="text-slate-400">cloudflare-worker/worker.js</code> once so anyone with the app URL can trigger scans without a token.</p>
+            <label class="block text-slate-300 mb-1">iVolatility API Key</label>
+            <input id="inpApiKey" type="text" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 mono" placeholder="Enter API Key..." />
           </div>
-          <div class="border-t border-slate-800 pt-3">
-            <label class="block text-slate-300 mb-1 font-medium">Option B — GitHub Fine-Grained Token <span class="text-slate-500 font-normal">(Saved in this browser only)</span></label>
-            <input id="inpGhToken" type="password" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 mono" placeholder="github_pat_... (Actions: Read & Write)" />
-            <p class="text-[11px] text-slate-500 mt-1">Grant <code class="text-slate-400">Actions: Read &amp; write</code> (and <code class="text-slate-400">Contents: Read</code>) on <code class="text-slate-400" id="repoSlugLabel">MichaelJoudan/pre-earnings-put-screener</code>.</p>
+          <div>
+            <label class="block text-slate-300 mb-1">iVolatility Username</label>
+            <input id="inpUsername" type="text" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 mono" placeholder="Enter Username..." />
+          </div>
+          <div>
+            <label class="block text-slate-300 mb-1">iVolatility Password</label>
+            <input id="inpPassword" type="password" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 mono" placeholder="Enter Password..." />
           </div>
         </div>
-        <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800">
-          <a id="ghActionsDirectLink" href="https://github.com/MichaelJoudan/pre-earnings-put-screener/actions/workflows/live_scan.yml" target="_blank" rel="noopener noreferrer" class="text-xs text-indigo-400 hover:text-indigo-300 font-medium">Open GitHub Actions Runner &nearr;</a>
-          <div class="flex gap-2">
-            <button onclick="closeScanConfigModal()" class="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-300">Cancel</button>
-            <button onclick="saveScanConfig()" class="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white">Save &amp; Ready</button>
-          </div>
+        <div class="flex justify-end gap-2 pt-2">
+          <button onclick="closeCredModal()" class="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-300">Cancel</button>
+          <button onclick="saveCredentials()" class="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white">Save Credentials</button>
         </div>
       </div>
     </div>
@@ -148,42 +139,17 @@
   </div>
 
   <script>
-    // =========================================================================
-    // REPOSITORY & ONLINE DISPATCH CONFIGURATION
-    // =========================================================================
-    const GITHUB_OWNER = 'MichaelJoudan';
-    const GITHUB_REPO = 'pre-earnings-put-screener';
-    const WORKFLOW_FILE = 'live_scan.yml';
-    // Optional public webhook relay URL (e.g. Cloudflare Worker) for zero-token open-access scan dispatch:
-    const DEFAULT_RELAY_URL = '';
-
     let DATA = null;
     let CURRENT_TAB = 'entries';
     let HAS_PYTHON_BACKEND = null;
 
-    function detectRepoFromHost() {
-      const host = window.location.hostname;
-      if (host.endsWith('.github.io')) {
-        const owner = host.replace('.github.io', '');
-        const segs = window.location.pathname.split('/').filter(Boolean);
-        if (owner && segs.length > 0) {
-          return { owner, repo: segs[0] };
-        }
-      }
-      return { owner: GITHUB_OWNER, repo: GITHUB_REPO };
-    }
+    const SECONDARY_SHARE_CLASSES = new Set([
+      "GOOG", "BRK/A", "BRK.A", "FOX", "PBR/A", "PBR.A",
+      "BBL", "RDS/B", "RDS.B", "NWS", "UA", "Z", "HEI/A"
+    ]);
 
-    const REPO_INFO = detectRepoFromHost();
-    document.getElementById('repoSlugLabel').textContent = `${REPO_INFO.owner}/${REPO_INFO.repo}`;
-    document.getElementById('ghActionsDirectLink').href = `https://github.com/${REPO_INFO.owner}/${REPO_INFO.repo}/actions/workflows/${WORKFLOW_FILE}`;
-
-    function getRelayUrl() {
-      return (localStorage.getItem('screener_relay_url') || DEFAULT_RELAY_URL || '').trim().replace(/\/+$/, '');
-    }
-
-    function getGhToken() {
-      return (localStorage.getItem('screener_gh_token') || '').trim();
-    }
+    const sleep = ms => new Promise(res => setTimeout(res, ms));
+    const roundN = (v, n) => Number(Math.round(Number(v + 'e' + n)) + 'e-' + n);
 
     async function checkPythonBackend() {
       if (HAS_PYTHON_BACKEND !== null) return HAS_PYTHON_BACKEND;
@@ -200,69 +166,48 @@
       return HAS_PYTHON_BACKEND;
     }
 
-    async function fetchLatestSignalsJson() {
-      const candidates = [];
-      const bust = Date.now();
-
+    async function loadCredentials() {
+      const localOverride = localStorage.getItem('ivol_credentials_override');
+      if (localOverride) {
+        try { return JSON.parse(localOverride); } catch (_) {}
+      }
       if (await checkPythonBackend()) {
-        try {
-          const resp = await fetch(`/api/signals?t=${bust}`, { cache: 'no-store' });
-          if (resp.ok) candidates.push(await resp.json());
-        } catch (_) {}
+        const r = await fetch('/api/credentials', { cache: 'no-store' });
+        if (r.ok) return await r.json();
       }
+      const r = await fetch(`./ivol_credentials.json?t=${Date.now()}`, { cache: 'no-store' });
+      if (r.ok) return await r.json();
+      return { api_key: '', username: '', password: '' };
+    }
 
-      try {
-        const resp = await fetch(`./output/latest_signals.json?t=${bust}`, { cache: 'no-store' });
-        if (resp.ok) candidates.push(await resp.json());
-      } catch (_) {}
+    async function openCredModal() {
+      const c = await loadCredentials();
+      document.getElementById('inpApiKey').value = c.api_key || '';
+      document.getElementById('inpUsername').value = c.username || '';
+      document.getElementById('inpPassword').value = c.password || '';
+      document.getElementById('credModal').classList.remove('hidden');
+    }
 
-      // If a GitHub token is stored (or repo is public), check live branch output for instant zero-CDN-lag updates
-      const tok = getGhToken();
-      try {
-        const headers = { 'Accept': 'application/vnd.github.raw+json' };
-        if (tok) headers['Authorization'] = `Bearer ${tok}`;
-        const ghUrl = `https://api.github.com/repos/${REPO_INFO.owner}/${REPO_INFO.repo}/contents/output/latest_signals.json?ref=main&t=${bust}`;
-        const gr = await fetch(ghUrl, { headers, cache: 'no-store' });
-        if (gr.ok) candidates.push(await gr.json());
-      } catch (_) {}
+    function closeCredModal() {
+      document.getElementById('credModal').classList.add('hidden');
+    }
 
-      if (!candidates.length) {
-        throw new Error('Could not load output/latest_signals.json');
+    async function saveCredentials() {
+      const payload = {
+        api_key: document.getElementById('inpApiKey').value.trim(),
+        username: document.getElementById('inpUsername').value.trim(),
+        password: document.getElementById('inpPassword').value.trim()
+      };
+      localStorage.setItem('ivol_credentials_override', JSON.stringify(payload));
+      if (await checkPythonBackend()) {
+        await fetch('/api/credentials', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
       }
-      candidates.sort((a, b) => String(b.generated_at || '').localeCompare(String(a.generated_at || '')));
-      return candidates[0];
-    }
-
-    async function loadSignals() {
-      try {
-        const newest = await fetchLatestSignalsJson();
-        if (!DATA || newest.generated_at !== DATA.generated_at) {
-          DATA = newest;
-          renderAll();
-        }
-      } catch (err) {
-        console.error('Signal load error:', err);
-      }
-    }
-
-    function openScanConfigModal() {
-      document.getElementById('inpRelayUrl').value = getRelayUrl();
-      document.getElementById('inpGhToken').value = getGhToken();
-      document.getElementById('scanConfigModal').classList.remove('hidden');
-    }
-
-    function closeScanConfigModal() {
-      document.getElementById('scanConfigModal').classList.add('hidden');
-    }
-
-    function saveScanConfig() {
-      const relay = document.getElementById('inpRelayUrl').value.trim().replace(/\/+$/, '');
-      const tok = document.getElementById('inpGhToken').value.trim();
-      if (relay) localStorage.setItem('screener_relay_url', relay);
-      else localStorage.removeItem('screener_relay_url');
-      if (tok) localStorage.setItem('screener_gh_token', tok);
-      else localStorage.removeItem('screener_gh_token');
-      closeScanConfigModal();
+      closeCredModal();
+      alert('Saved iVolatility credentials. Next live scan will use them immediately.');
     }
 
     async function openPineModal() {
@@ -274,8 +219,6 @@
           if (r.ok) {
             box.textContent = await r.text();
             box.dataset.loaded = '1';
-          } else {
-            box.textContent = 'Unable to load companion Pine script.';
           }
         } catch (e) {
           box.textContent = 'Error loading Pine script: ' + e;
@@ -288,8 +231,7 @@
     }
 
     async function copyPineScript() {
-      const txt = document.getElementById('pineCodeBox').textContent || '';
-      await navigator.clipboard.writeText(txt);
+      await navigator.clipboard.writeText(document.getElementById('pineCodeBox').textContent || '');
       const btn = document.getElementById('copyPineBtn');
       const orig = btn.textContent;
       btn.textContent = 'Copied!';
@@ -308,166 +250,708 @@
     }
 
     async function exportCsv() {
-      try {
-        const url = (await checkPythonBackend()) ? `/api/export.csv?t=${Date.now()}` : `./output/latest_signals.csv?t=${Date.now()}`;
-        const resp = await fetch(url, { cache: 'no-store' });
-        let blob;
-        if (resp.ok) {
-          blob = await resp.blob();
-        } else if (DATA && DATA.signals) {
-          blob = new Blob([signalsToCsv(DATA.signals)], { type: 'text/csv;charset=utf-8;' });
-        } else {
-          throw new Error('No CSV data available');
-        }
+      if (DATA && DATA.signals && DATA.signals.length) {
+        const blob = new Blob([signalsToCsv(DATA.signals)], { type: 'text/csv;charset=utf-8;' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
         a.download = 'pre_earnings_put_signals.csv';
         document.body.appendChild(a);
         a.click();
         a.remove();
-      } catch (err) {
-        alert('CSV export failed: ' + err.message);
+        return;
+      }
+      window.location.href = './output/latest_signals.csv';
+    }
+
+    async function loadSignals() {
+      const bust = Date.now();
+      const url = (await checkPythonBackend()) ? `/api/signals?t=${bust}` : `./output/latest_signals.json?t=${bust}`;
+      const resp = await fetch(url, { cache: 'no-store' });
+      const fresh = await resp.json();
+      if (!DATA || fresh.generated_at !== DATA.generated_at) {
+        DATA = fresh;
+        renderAll();
       }
     }
 
-    const sleep = ms => new Promise(res => setTimeout(res, ms));
+    // =========================================================================
+    // BROWSER-NATIVE LIVE SCANNER (100% Exact Port of scanner_engine.py + ivol_client.py)
+    // Runs directly in the browser via CORS-enabled restapi.ivolatility.com!
+    // =========================================================================
+    function openIdbCache() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open('PreEarningsIvolCache_v1', 1);
+        req.onupgradeneeded = e => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv');
+        };
+        req.onsuccess = e => resolve(e.target.result);
+        req.onerror = () => resolve(null);
+      });
+    }
+
+    async function idbGet(key) {
+      const db = await openIdbCache();
+      if (!db) return null;
+      return new Promise(res => {
+        const tx = db.transaction('kv', 'readonly');
+        const req = tx.objectStore('kv').get(key);
+        req.onsuccess = () => res(req.result ?? null);
+        req.onerror = () => res(null);
+      });
+    }
+
+    async function idbSet(key, val) {
+      const db = await openIdbCache();
+      if (!db) return;
+      return new Promise(res => {
+        const tx = db.transaction('kv', 'readwrite');
+        tx.objectStore('kv').put(val, key);
+        tx.oncomplete = () => res();
+        tx.onerror = () => res();
+      });
+    }
+
+    function fmtDateUTC(dt) {
+      const y = dt.getUTCFullYear();
+      const m = String(dt.getUTCMonth() + 1).padStart(2, '0');
+      const d = String(dt.getUTCDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+
+    function parseDateUTC(s) {
+      const [y, m, d] = s.split('-').map(Number);
+      return new Date(Date.UTC(y, m - 1, d));
+    }
+
+    function addDaysUTC(dt, days) {
+      const out = new Date(dt.getTime());
+      out.setUTCDate(out.getUTCDate() + days);
+      return out;
+    }
+
+    function nearestWorkdayUTC(year, month1, day) {
+      const dt = new Date(Date.UTC(year, month1 - 1, day));
+      const wd = dt.getUTCDay(); // 0=Sun, 6=Sat
+      if (wd === 6) return addDaysUTC(dt, -1);
+      if (wd === 0) return addDaysUTC(dt, 1);
+      return dt;
+    }
+
+    function nthWeekdayOfMonthUTC(year, month1, targetDow, nth) {
+      const first = new Date(Date.UTC(year, month1 - 1, 1));
+      const diff = (targetDow - first.getUTCDay() + 7) % 7;
+      return new Date(Date.UTC(year, month1 - 1, 1 + diff + 7 * (nth - 1)));
+    }
+
+    function lastWeekdayOfMonthUTC(year, month1, targetDow) {
+      const last = new Date(Date.UTC(year, month1, 0));
+      const diff = (last.getUTCDay() - targetDow + 7) % 7;
+      return addDaysUTC(last, -diff);
+    }
+
+    function goodFridayUTC(year) {
+      const a = year % 19;
+      const b = Math.floor(year / 100);
+      const c = year % 100;
+      const d = Math.floor(b / 4);
+      const e = b % 4;
+      const f = Math.floor((b + 8) / 25);
+      const g = Math.floor((b - f + 1) / 3);
+      const h = (19 * a + b - d - g + 15) % 30;
+      const i = Math.floor(c / 4);
+      const k = c % 4;
+      const l = (32 + 2 * e + 2 * i - h - k) % 7;
+      const m = Math.floor((a + 11 * h + 22 * l) / 451);
+      const month = Math.floor((h + l - 7 * m + 114) / 31);
+      const day = ((h + l - 7 * m + 114) % 31) + 1;
+      const easter = new Date(Date.UTC(year, month - 1, day));
+      return addDaysUTC(easter, -2);
+    }
+
+    function usMarketHolidays(years) {
+      const hols = new Set();
+      for (const y of years) {
+        hols.add(fmtDateUTC(nearestWorkdayUTC(y, 1, 1)));
+        hols.add(fmtDateUTC(nearestWorkdayUTC(y + 1, 1, 1))); // handles Dec 31 observance
+        hols.add(fmtDateUTC(nthWeekdayOfMonthUTC(y, 1, 1, 3)));  // MLK (3rd Mon Jan)
+        hols.add(fmtDateUTC(nthWeekdayOfMonthUTC(y, 2, 1, 3)));  // Presidents (3rd Mon Feb)
+        hols.add(fmtDateUTC(goodFridayUTC(y)));                  // Good Friday
+        hols.add(fmtDateUTC(lastWeekdayOfMonthUTC(y, 5, 1)));    // Memorial (Last Mon May)
+        if (y >= 2022) hols.add(fmtDateUTC(nearestWorkdayUTC(y, 6, 19))); // Juneteenth
+        hols.add(fmtDateUTC(nearestWorkdayUTC(y, 7, 4)));        // Independence Day
+        hols.add(fmtDateUTC(nthWeekdayOfMonthUTC(y, 9, 1, 1)));  // Labor Day (1st Mon Sep)
+        hols.add(fmtDateUTC(nthWeekdayOfMonthUTC(y, 11, 4, 4))); // Thanksgiving (4th Thu Nov)
+        hols.add(fmtDateUTC(nearestWorkdayUTC(y, 12, 25)));      // Christmas
+      }
+      return hols;
+    }
+
+    function buildNyseTradingDays(startDt, endDt) {
+      const yrs = [];
+      for (let y = startDt.getUTCFullYear(); y <= endDt.getUTCFullYear(); y++) yrs.push(y);
+      const hols = usMarketHolidays(yrs);
+      const out = [];
+      let cur = new Date(startDt.getTime());
+      while (cur <= endDt) {
+        const wd = cur.getUTCDay();
+        const ds = fmtDateUTC(cur);
+        if (wd >= 1 && wd <= 5 && !hols.has(ds)) out.push(ds);
+        cur = addDaysUTC(cur, 1);
+      }
+      return out;
+    }
+
+    function thirdFridayUTC(year, month1) {
+      return nthWeekdayOfMonthUTC(year, month1, 5, 3);
+    }
+
+    function cleanOptionQuote(bidRaw, askRaw, midRaw) {
+      const b = (bidRaw !== null && bidRaw !== undefined && bidRaw !== '' && !Number.isNaN(Number(bidRaw))) ? Number(bidRaw) : NaN;
+      const a = (askRaw !== null && askRaw !== undefined && askRaw !== '' && !Number.isNaN(Number(askRaw))) ? Number(askRaw) : NaN;
+      const m = (midRaw !== null && midRaw !== undefined && midRaw !== '' && !Number.isNaN(Number(midRaw))) ? Number(midRaw) : NaN;
+      if (!Number.isNaN(b) && !Number.isNaN(a) && a > 0 && b >= 0 && a >= b) {
+        const midCalc = 0.5 * (b + a);
+        return [b, a, midCalc, midCalc > 0];
+      }
+      if (!Number.isNaN(m) && m > 0) {
+        return [b, a, m, true];
+      }
+      return [NaN, NaN, NaN, false];
+    }
+
+    function parseNasdaqMcap(rawStr) {
+      if (!rawStr || typeof rawStr !== 'string') return 0.0;
+      let s = rawStr.trim().replace(/\$/g, '').replace(/,/g, '');
+      if (!s || s.toUpperCase() === 'N/A') return 0.0;
+      let mult = 1.0;
+      if (s.endsWith('T')) { mult = 1e12; s = s.slice(0, -1); }
+      else if (s.endsWith('B')) { mult = 1e9; s = s.slice(0, -1); }
+      else if (s.endsWith('M')) { mult = 1e6; s = s.slice(0, -1); }
+      const v = Number(s);
+      return Number.isFinite(v) ? v * mult : 0.0;
+    }
+
+    function parseCsvLine(line) {
+      const row = [];
+      let cur = '';
+      let inQ = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (inQ) {
+          if (ch === '"') {
+            if (i + 1 < line.length && line[i + 1] === '"') { cur += '"'; i++; }
+            else inQ = false;
+          } else cur += ch;
+        } else {
+          if (ch === '"') inQ = true;
+          else if (ch === ',') { row.push(cur); cur = ''; }
+          else cur += ch;
+        }
+      }
+      row.push(cur);
+      return row;
+    }
+
+    function parseRepairedSmdCsvText(text, whitelistSet) {
+      const lines = text.split(/\r?\n/);
+      if (!lines.length) return {};
+      const header = parseCsvLine(lines[0]);
+      const ncol = header.length;
+      if (ncol < 10) return {};
+      const indIdx = header.indexOf('industry') >= 0 ? header.indexOf('industry') : 45;
+      const symIdx = header.indexOf('symbol');
+      const wantedCols = ['symbol', 'companyName', 'industry', 'marketCap', 'ivx90', 'ivr90', 'ivx30', 'ivr30', 'ivp90', 'close', 'openInterest'];
+      const colIdx = {};
+      for (const c of wantedCols) colIdx[c] = header.indexOf(c);
+
+      const smdMap = {};
+      let totalValid = 0;
+      for (let li = 1; li < lines.length; li++) {
+        const ln = lines[li];
+        if (!ln) continue;
+        let row = parseCsvLine(ln);
+        if (row.length !== ncol) {
+          if (row.length > ncol) {
+            const extra = row.length - ncol;
+            row = [
+              ...row.slice(0, indIdx),
+              row.slice(indIdx, indIdx + 1 + extra).join(','),
+              ...row.slice(indIdx + 1 + extra)
+            ];
+            if (row.length !== ncol) continue;
+          } else continue;
+        }
+        const sym = (row[symIdx] || '').trim();
+        if (!sym || SECONDARY_SHARE_CLASSES.has(sym)) continue;
+        totalValid++;
+        if (whitelistSet && whitelistSet.size > 500 && !whitelistSet.has(sym)) continue;
+        smdMap[sym] = {
+          symbol: sym,
+          companyName: row[colIdx.companyName] || '',
+          industry: row[colIdx.industry] || '',
+          marketCap: Number(row[colIdx.marketCap]),
+          ivx90: Number(row[colIdx.ivx90]),
+          ivr90: Number(row[colIdx.ivr90]),
+          ivx30: Number(row[colIdx.ivx30]),
+          ivr30: Number(row[colIdx.ivr30]),
+          ivp90: Number(row[colIdx.ivp90]),
+          close: Number(row[colIdx.close]),
+          openInterest: Number(row[colIdx.openInterest] || 0)
+        };
+      }
+      return totalValid > 1000 ? smdMap : {};
+    }
+
+    async function resolveIvolAuthQuery() {
+      const creds = await loadCredentials();
+      if (creds.api_key) {
+        return `apiKey=${encodeURIComponent(creds.api_key)}`;
+      }
+      if (creds.username && creds.password) {
+        const r = await fetch(`https://restapi.ivolatility.com/token/get?username=${encodeURIComponent(creds.username)}&password=${encodeURIComponent(creds.password)}`);
+        if (!r.ok) throw new Error(`iVolatility login failed (${r.status})`);
+        const tok = (await r.text()).trim().replace(/^"|"$/g, '');
+        return `token=${encodeURIComponent(tok)}`;
+      }
+      throw new Error('Please enter your iVolatility API Key or Username/Password in iVolatility API Keys.');
+    }
+
+    let _lastIvolCallTs = 0;
+    async function ivolThrottle() {
+      const now = performance.now();
+      const wait = 800 - (now - _lastIvolCallTs);
+      if (wait > 0) await sleep(wait);
+      _lastIvolCallTs = performance.now();
+    }
+
+    async function fetchIvolSmdForDate(tradeDate, authQuery, whitelistSet, onProgress) {
+      const cacheKey = `smd_ALL_USA_${tradeDate}`;
+      const cached = await idbGet(cacheKey);
+      if (cached && Object.keys(cached).length > 500) {
+        return cached;
+      }
+
+      await ivolThrottle();
+      const url = `https://restapi.ivolatility.com/equities/stock-market-data?stockGroup=ALL_USA&from=${tradeDate}&to=${tradeDate}&${authQuery}`;
+      const resp = await fetch(url);
+      if (resp.status === 204) return {};
+      if (!resp.ok) throw new Error(`iVolatility SMD HTTP ${resp.status}`);
+
+      const ctype = resp.headers.get('content-type') || '';
+      let csvText = '';
+      if (ctype.includes('json') || ctype.includes('text/plain')) {
+        const payload = await resp.json();
+        if (Array.isArray(payload)) {
+          if (payload.length < 1000) return {};
+          const map = {};
+          for (const r of payload) {
+            const sym = String(r.symbol || '').trim();
+            if (!sym || SECONDARY_SHARE_CLASSES.has(sym)) continue;
+            if (whitelistSet && whitelistSet.size > 500 && !whitelistSet.has(sym)) continue;
+            map[sym] = r;
+          }
+          await idbSet(cacheKey, map);
+          return map;
+        }
+        const detUrl = payload?.status?.urlForDetails;
+        if (!detUrl) return {};
+        let dlUrl = null;
+        for (let poll = 0; poll < 90; poll++) {
+          onProgress(`Preparing iVolatility ALL_USA (${tradeDate})...`);
+          await ivolThrottle();
+          const sep = detUrl.includes('?') ? '&' : '?';
+          const dr = await fetch(`${detUrl}${sep}${authQuery}`);
+          if (!dr.ok) throw new Error(`iVolatility details HTTP ${dr.status}`);
+          const dj = await dr.json();
+          const st = dj?.[0]?.meta?.status;
+          if (st === 'COMPLETE') {
+            dlUrl = dj?.[0]?.data?.[0]?.urlForDownload;
+            if (!dlUrl) return {};
+            break;
+          }
+          await sleep(600);
+        }
+        if (!dlUrl) throw new Error('Timed out waiting for iVolatility SMD file.');
+        onProgress(`Downloading iVolatility ALL_USA (${tradeDate})...`);
+        const dlResp = await fetch(dlUrl);
+        if (!dlResp.ok) throw new Error(`S3 download HTTP ${dlResp.status}`);
+        const ds = new DecompressionStream('gzip');
+        csvText = await new Response(dlResp.body.pipeThrough(ds)).text();
+      } else {
+        csvText = await resp.text();
+      }
+
+      const parsedMap = parseRepairedSmdCsvText(csvText, whitelistSet);
+      if (Object.keys(parsedMap).length > 500) {
+        await idbSet(cacheKey, parsedMap);
+      }
+      return parsedMap;
+    }
+
+    async function fetchBest90dAtmPutBrowser(symbol, quoteDate, fallbackSpot, authQuery) {
+      const emptyRes = {
+        opt_matched: false, option_symbol: "", expiration_date: "", dte: null,
+        strike: null, bid: null, ask: null, mid: null, limit_25_price: null,
+        entry_credit_pct: null, half_spread_pct: null, opt_iv_pct: null,
+        delta: null, theta: null, vega: null, opt_oi: null, opt_volume: null
+      };
+      const qCands = [symbol];
+      if (symbol.includes('/')) qCands.push(symbol.replace(/\//g, '.'));
+      else if (symbol.includes('.')) qCands.push(symbol.replace(/\./g, '/'));
+
+      let rows = [];
+      for (const qs of qCands) {
+        const cKey = `opts_${qs}_${quoteDate}_55_135_-12_12_P`;
+        const cached = await idbGet(cKey);
+        if (cached !== null) {
+          rows = cached;
+        } else {
+          await ivolThrottle();
+          const u = `https://restapi.ivolatility.com/equities/eod/stock-opts-by-param?symbol=${encodeURIComponent(qs)}&tradeDate=${quoteDate}&dteFrom=55&dteTo=135&moneynessFrom=-12&moneynessTo=12&cp=P&region=USA&${authQuery}`;
+          const r = await fetch(u);
+          if (r.ok && r.status !== 204) {
+            const j = await r.json();
+            rows = Array.isArray(j) ? j : (j.data || []);
+            await idbSet(cKey, rows);
+          } else {
+            rows = [];
+          }
+        }
+        if (rows && rows.length > 0) break;
+      }
+      if (!rows || !rows.length) return emptyRes;
+
+      const cands = [];
+      for (const r of rows) {
+        const up = Number(r.underlying_price);
+        const spot = (Number.isFinite(up) && up > 0) ? up : fallbackSpot;
+        const ks = Number(r.price_strike);
+        const dteV = Math.trunc(Number(r.dte));
+        if (!Number.isFinite(spot) || spot <= 0 || !Number.isFinite(ks) || ks <= 0 || dteV < 55 || dteV > 135) continue;
+        const relM = Math.abs(ks - spot) / spot;
+        if (relM > 0.12) continue;
+        const [bb, aa, mm, ok] = cleanOptionQuote(r.Bid, r.Ask, r.price);
+        if (!ok || !Number.isFinite(mm) || mm <= 0) continue;
+        const expS = String(r.expiration_date || '').slice(0, 10);
+        let monthlyPen = 0.005;
+        if (/^\d{4}-\d{2}-\d{2}$/.test(expS)) {
+          const dExp = parseDateUTC(expS);
+          const tf = thirdFridayUTC(dExp.getUTCFullYear(), dExp.getUTCMonth() + 1);
+          const diffDays = Math.abs((dExp.getTime() - tf.getTime()) / 86400000);
+          if (diffDays <= 1) monthlyPen = 0.0;
+        }
+        const oiV = Number(r.openinterest || 0) || 0;
+        const score = relM + 0.0015 * Math.abs(dteV - 90) + monthlyPen;
+        cands.push({ score, negOi: -oiV, r, spot, ks, dteV, expS, bb, aa, mm });
+      }
+      if (!cands.length) return emptyRes;
+
+      cands.sort((a, b) => (a.score - b.score) || (a.negOi - b.negOi));
+      const best = cands[0];
+      const { r: rb, spot, ks, dteV, expS, bb, aa, mm } = best;
+      const hsVal = (Number.isFinite(aa) && Number.isFinite(bb) && aa >= bb) ? Math.max(0.0, (aa - bb) * 0.5) : 0.0;
+      const lim25 = Math.max(0.01, mm - 0.25 * hsVal);
+      const ivRaw = Number(rb.iv);
+      const ivPct = (Number.isFinite(ivRaw) && ivRaw > 0) ? (ivRaw < 3.0 ? ivRaw * 100.0 : ivRaw) : NaN;
+
+      return {
+        opt_matched: true,
+        option_symbol: String(rb.option_symbol || '').trim(),
+        expiration_date: expS,
+        dte: dteV,
+        strike: roundN(ks, 2),
+        bid: Number.isFinite(bb) ? roundN(bb, 2) : null,
+        ask: Number.isFinite(aa) ? roundN(aa, 2) : null,
+        mid: roundN(mm, 2),
+        limit_25_price: roundN(lim25, 2),
+        entry_credit_pct: roundN((mm / spot) * 100.0, 2),
+        half_spread_pct: roundN((hsVal / spot) * 100.0, 3),
+        opt_iv_pct: Number.isFinite(ivPct) ? roundN(ivPct, 2) : null,
+        delta: Number.isFinite(Number(rb.delta)) ? roundN(Number(rb.delta), 3) : null,
+        theta: Number.isFinite(Number(rb.theta)) ? roundN(Number(rb.theta), 3) : null,
+        vega: Number.isFinite(Number(rb.vega)) ? roundN(Number(rb.vega), 3) : null,
+        opt_oi: Number.isFinite(Number(rb.openinterest)) ? Math.trunc(Number(rb.openinterest)) : 0,
+        opt_volume: Number.isFinite(Number(rb.volume)) ? Math.trunc(Number(rb.volume)) : 0
+      };
+    }
+
+    async function runBrowserLiveScan(onProgress) {
+      const t0 = performance.now();
+      const authQuery = await resolveIvolAuthQuery();
+
+      // Determine today's date in NYSE timezone (America/New_York)
+      const nyStr = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit'
+      }).format(new Date());
+      const todayDt = parseDateUTC(nyStr);
+      const nyseDays = buildNyseTradingDays(addDaysUTC(todayDt, -60), addDaysUTC(todayDt, 75));
+      const futureOrToday = nyseDays.filter(d => d >= nyStr);
+      const refTradingDay = futureOrToday[0];
+      const refIdx = nyseDays.indexOf(refTradingDay);
+
+      onProgress('Loading Universe & Calendar...');
+      const [wlResp, normResp, earnWinResp] = await Promise.all([
+        fetch('./reference_data/us_common_stocks.json'),
+        fetch('./reference_data/normal_ivr_baselines.json'),
+        fetch(`./output/nasdaq_earnings_window.json?t=${Date.now()}`, { cache: 'no-store' })
+      ]);
+      const commonWhitelist = new Set(wlResp.ok ? await wlResp.json() : []);
+      const normIvr90Map = normResp.ok ? ((await normResp.json()).norm_ivr90 || {}) : {};
+      const earnWin = earnWinResp.ok ? await earnWinResp.json() : null;
+
+      const macro = earnWin?.macro_regime ? { ...earnWin.macro_regime, as_of_date: refTradingDay } : { ...DATA.macro_regime, as_of_date: refTradingDay };
+      const rawEarnRows = (earnWin?.raw_earn_rows || []).slice().sort((a, b) => String(a.report_date || '').localeCompare(String(b.report_date || '')));
+
+      // Load latest iVolatility ALL_USA universe (offsets 0..7)
+      let smdMap = {};
+      let smdDate = nyStr;
+      for (let offset = 0; offset < 8; offset++) {
+        const candDt = addDaysUTC(todayDt, -offset);
+        const wd = candDt.getUTCDay();
+        if (wd === 0 || wd === 6) continue;
+        const candStr = fmtDateUTC(candDt);
+        onProgress(`Checking iVolatility EOD (${candStr})...`);
+        const tryMap = await fetchIvolSmdForDate(candStr, authQuery, commonWhitelist, onProgress);
+        if (Object.keys(tryMap).length > 500) {
+          smdMap = tryMap;
+          smdDate = candStr;
+          break;
+        }
+      }
+      if (!Object.keys(smdMap).length) {
+        throw new Error('Could not retrieve iVolatility ALL_USA stock market data.');
+      }
+
+      const seenSyms = new Set();
+      const candidates = [];
+      const minMcUsd = 10.0 * 1e9;
+      const coreIvrMax = 25.0;
+      const reversionIvrMin = 50.0;
+      const maxHalfSpreadPct = 0.35;
+
+      for (const er of rawEarnRows) {
+        const rawSym = String(er.symbol || '').trim().toUpperCase();
+        if (!rawSym || SECONDARY_SHARE_CLASSES.has(rawSym)) continue;
+        const ivolSym = (rawSym === 'BRK.B' || rawSym === 'BF.B') ? rawSym.replace('.', '/') : rawSym;
+        if (rawSym.includes('.') && rawSym !== 'BRK.B' && rawSym !== 'BF.B') continue;
+        if (seenSyms.has(ivolSym)) continue;
+
+        const smdRow = smdMap[ivolSym];
+        if (!smdRow) continue;
+        if (commonWhitelist.size > 0 && !commonWhitelist.has(ivolSym)) continue;
+
+        const nasdaqMc = parseNasdaqMcap(er.marketCap);
+        const ivolMc = Number(smdRow.marketCap || 0) || 0;
+        let bestMc = (ivolMc >= 1e8 && Number.isFinite(ivolMc)) ? ivolMc : nasdaqMc;
+        if (nasdaqMc >= 1e9 && ivolMc <= 0) bestMc = nasdaqMc;
+        if (bestMc < minMcUsd) continue;
+
+        const ivx90 = Number(smdRow.ivx90);
+        const ivr90 = Number(smdRow.ivr90);
+        const ivx30 = Number(smdRow.ivx30);
+        const ivr30 = Number(smdRow.ivr30);
+        const ivp90 = Number(smdRow.ivp90);
+        const spot = Number(smdRow.close);
+        if (!Number.isFinite(ivr90) || !Number.isFinite(spot) || spot <= 0) continue;
+
+        const repDt = String(er.report_date || '');
+        seenSyms.add(ivolSym);
+
+        const tRaw = String(er.time || '').toLowerCase();
+        let todCode, todLabel, reactionDt;
+        if (tRaw.includes('after')) {
+          todCode = 'AMC';
+          todLabel = 'After Market Close';
+          const later = nyseDays.filter(d => d > repDt);
+          if (!later.length) continue;
+          reactionDt = later[0];
+        } else {
+          todCode = tRaw.includes('pre') ? 'BMO' : 'BMO (Unconfirmed Time)';
+          todLabel = tRaw.includes('pre') ? 'Before Market Open' : 'Before Open (Conservative Default)';
+          const laterOrEq = nyseDays.filter(d => d >= repDt);
+          if (!laterOrEq.length) continue;
+          reactionDt = laterOrEq[0];
+        }
+
+        const rIdx = nyseDays.indexOf(reactionDt);
+        if (rIdx < 20) continue;
+
+        const exitDt = nyseDays[rIdx - 1];
+        const entryDt = nyseDays[rIdx - 20];
+        const tdToReaction = rIdx - refIdx;
+        const tdToEntry = (rIdx - 20) - refIdx;
+        if (tdToReaction < 0 || tdToReaction > 27) continue;
+
+        let windowBucket = 'ACTIVE_COHORT';
+        if (tdToReaction === 0) windowBucket = 'REACTING_TODAY';
+        else if (tdToReaction === 1 || tdToReaction === 2) windowBucket = 'EXIT_ALERT';
+        else if (tdToReaction >= 18 && tdToReaction <= 22) windowBucket = 'ENTRY_WINDOW';
+        else if (tdToReaction >= 23 && tdToReaction <= 27) windowBucket = 'WATCHLIST_UPCOMING';
+
+        const norm90 = Number(normIvr90Map[ivolSym] ?? 27.3);
+        const excessNorm90 = ivr90 - norm90;
+
+        candidates.push({
+          symbol: ivolSym,
+          company_name: String(smdRow.companyName || er.name || ivolSym).trim(),
+          industry: String(smdRow.industry || '').replace(/"/g, '').trim(),
+          market_cap_b: roundN(bestMc / 1e9, 2),
+          spot_price: roundN(spot, 2),
+          quote_date: smdDate,
+          report_date: repDt,
+          release_timing: todCode,
+          release_timing_label: todLabel,
+          reaction_date: reactionDt,
+          scheduled_entry_date: entryDt,
+          scheduled_exit_date: exitDt,
+          trading_days_to_reaction: tdToReaction,
+          trading_days_to_entry: tdToEntry,
+          window_bucket: windowBucket,
+          ivx30_pct: Number.isFinite(ivx30) ? roundN(ivx30, 2) : null,
+          ivx90_pct: Number.isFinite(ivx90) ? roundN(ivx90, 2) : null,
+          ivr30: Number.isFinite(ivr30) ? roundN(ivr30, 1) : null,
+          ivr90: roundN(ivr90, 1),
+          ivp90: Number.isFinite(ivp90) ? roundN(ivp90, 1) : null,
+          norm_ivr90_baseline: roundN(norm90, 1),
+          ivr90_excess_vs_norm: roundN(excessNorm90, 1),
+          total_opt_oi: Math.trunc(Number(smdRow.openInterest || 0) || 0),
+          eps_forecast: String(er.epsForecast || '').trim()
+        });
+      }
+
+      const activeCohort = candidates.filter(c => c.window_bucket === 'ACTIVE_COHORT');
+      const estActiveCore = activeCohort.filter(c => c.ivr90 < (coreIvrMax + 3.0));
+      const nCoreActive = estActiveCore.length;
+      const coreAllocPct = Math.min(100.0, nCoreActive * 10.0);
+      const idleCapacityPct = Math.max(0.0, 100.0 - coreAllocPct);
+      const idleSlotsCount = Math.max(0, 10 - nCoreActive);
+
+      const chainTargets = candidates.filter(c => ['ENTRY_WINDOW', 'WATCHLIST_UPCOMING', 'EXIT_ALERT'].includes(c.window_bucket));
+      const optResults = {};
+      for (let idx = 0; idx < chainTargets.length; idx++) {
+        const c = chainTargets[idx];
+        onProgress(`Pricing 90D Put Chains (${idx + 1}/${chainTargets.length}: ${c.symbol})...`);
+        try {
+          optResults[c.symbol] = await fetchBest90dAtmPutBrowser(c.symbol, smdDate, c.spot_price, authQuery);
+        } catch (_) {
+          optResults[c.symbol] = { opt_matched: false };
+        }
+      }
+
+      for (const c of candidates) {
+        Object.assign(c, optResults[c.symbol] || { opt_matched: false });
+        const wb = c.window_bucket;
+        const ivr = c.ivr90;
+        const tdR = c.trading_days_to_reaction;
+        const hs = c.half_spread_pct;
+        const spreadOk = (hs === null || hs === undefined) || (hs <= maxHalfSpreadPct);
+
+        if (wb === 'REACTING_TODAY') {
+          c.signal_code = 'FLAT_EARNINGS_REACTION';
+          c.signal_label = 'DO NOT HOLD — Earnings Reaction Today';
+          c.signal_tier = 'EXIT';
+          c.recommended_weight_pct = 0.0;
+        } else if (wb === 'EXIT_ALERT') {
+          c.signal_code = tdR === 1 ? 'MANDATORY_EXIT_TODAY' : 'EXIT_NEXT_SESSION';
+          c.signal_label = tdR === 1 ? 'CLOSE POSITION AT EOD TODAY (Day -1)' : 'PREPARE EXIT NEXT SESSION (Day -2)';
+          c.signal_tier = 'EXIT';
+          c.recommended_weight_pct = 0.0;
+        } else if (wb === 'ENTRY_WINDOW') {
+          if (ivr < coreIvrMax) {
+            if (spreadOk && c.opt_matched) {
+              c.signal_code = 'ENTER_CORE_SLEEVE';
+              c.signal_label = 'SELL 3M ATM PUT — Core Low-IVR Sleeve';
+              c.signal_tier = 'ACTIONABLE_ENTRY';
+              c.recommended_weight_pct = 10.0;
+            } else {
+              c.signal_code = 'LIMIT_ONLY_WIDE_SPREAD';
+              c.signal_label = 'LIMIT ORDER ONLY — Wide Option Spread';
+              c.signal_tier = 'CAUTION_ENTRY';
+              c.recommended_weight_pct = 5.0;
+            }
+          } else if (ivr >= reversionIvrMin) {
+            if (macro.post_stress_high_ivr_enabled && idleCapacityPct > 0) {
+              if (hs !== null && hs !== undefined && hs <= (maxHalfSpreadPct + 0.05) && c.opt_matched) {
+                c.signal_code = 'ENTER_POST_STRESS_SLEEVE';
+                c.signal_label = 'SELL 3M ATM PUT — Post-Stress Mean-Reversion';
+                c.signal_tier = 'ACTIONABLE_ENTRY';
+                c.recommended_weight_pct = Math.min(10.0, idleCapacityPct);
+              } else {
+                c.signal_code = 'LIMIT_ONLY_WIDE_SPREAD';
+                c.signal_label = 'LIMIT ORDER ONLY — Post-Stress Wide Spread';
+                c.signal_tier = 'CAUTION_ENTRY';
+                c.recommended_weight_pct = 5.0;
+              }
+            } else {
+              c.signal_code = 'BLOCKED_HIGH_IVR';
+              c.signal_label = 'BLOCKED — Circuit-Breaker Active (IVR >= 50)';
+              c.signal_tier = 'FILTERED_OUT';
+              c.recommended_weight_pct = 0.0;
+            }
+          } else {
+            c.signal_code = 'SKIP_MID_IVR';
+            c.signal_label = 'SKIP / DO NOT TRADE — Mid IV Rank Zone (25–50)';
+            c.signal_tier = 'FILTERED_OUT';
+            c.recommended_weight_pct = 0.0;
+          }
+        } else if (wb === 'WATCHLIST_UPCOMING') {
+          c.signal_code = 'WATCHLIST_UPCOMING';
+          c.signal_label = `WATCHLIST (Enters ${c.scheduled_entry_date})`;
+          c.signal_tier = 'WATCHLIST';
+          c.recommended_weight_pct = 0.0;
+        } else {
+          c.signal_code = 'ACTIVE_HOLD';
+          c.signal_label = `IN HOLDING WINDOW (Exit ${c.scheduled_exit_date})`;
+          c.signal_tier = 'COHORT';
+          c.recommended_weight_pct = ivr < (coreIvrMax + 3.0) ? 10.0 : 0.0;
+        }
+      }
+
+      const tierRank = { ACTIONABLE_ENTRY: 0, CAUTION_ENTRY: 1, EXIT: 2, WATCHLIST: 3, FILTERED_OUT: 4, COHORT: 5 };
+      candidates.sort((a, b) => ((tierRank[a.signal_tier] ?? 9) - (tierRank[b.signal_tier] ?? 9)) || (a.trading_days_to_reaction - b.trading_days_to_reaction) || (b.market_cap_b - a.market_cap_b));
+
+      const nowFmt = new Intl.DateTimeFormat('sv-SE', {
+        timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+      }).format(new Date());
+
+      return {
+        generated_at: nowFmt,
+        scan_elapsed_sec: roundN((performance.now() - t0) / 1000, 2),
+        macro_regime: macro,
+        portfolio_capacity: {
+          active_cohort_total_gt10b: activeCohort.length,
+          estimated_active_core_positions: nCoreActive,
+          estimated_core_allocation_pct: roundN(coreAllocPct, 1),
+          available_idle_capacity_pct: roundN(idleCapacityPct, 1),
+          available_idle_slots: idleSlotsCount,
+          cash_collateral_tbill_yield_pct: macro.tbill_3m_yield_pct,
+          actionable_entry_signals_today: candidates.filter(c => c.signal_tier === 'ACTIONABLE_ENTRY').length,
+          caution_limit_signals_today: candidates.filter(c => c.signal_tier === 'CAUTION_ENTRY').length,
+          mandatory_exit_alerts: candidates.filter(c => c.signal_tier === 'EXIT' && c.window_bucket === 'EXIT_ALERT').length,
+          upcoming_watchlist_count: candidates.filter(c => c.signal_tier === 'WATCHLIST').length
+        },
+        signals: candidates
+      };
+    }
 
     async function triggerRefresh() {
       const btn = document.getElementById('refreshBtn');
       const sp = document.getElementById('refreshSpinner');
       const tx = document.getElementById('refreshText');
-      const prevStamp = DATA ? DATA.generated_at : '';
-
       btn.disabled = true;
       sp.classList.remove('hidden');
-      tx.textContent = 'Starting Live Scan...';
-
+      tx.textContent = 'Scanning Live Market...';
       try {
-        // Mode 1: Cloud / Local Python Server Backend
         if (await checkPythonBackend()) {
-          const r = await fetch('/api/refresh', { method: 'POST' });
-          if (!r.ok) throw new Error('Backend scan request failed');
-          const init = await r.json();
-          if (init.signals) {
-            DATA = init;
-            renderAll();
-            return;
-          }
-          for (let i = 0; i < 90; i++) {
-            await sleep(2000);
-            const sr = await fetch('/api/scan-status', { cache: 'no-store' });
-            const st = await sr.json();
-            tx.textContent = st.running ? `Scanning Market (${i * 2}s)...` : 'Loading Signals...';
-            if (!st.running) {
-              if (st.error) throw new Error(st.error);
-              await loadSignals();
-              return;
-            }
-          }
-          throw new Error('Timed out waiting for scan completion.');
+          const resp = await fetch('/api/refresh', { method: 'POST' });
+          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+          DATA = await resp.json();
+        } else {
+          DATA = await runBrowserLiveScan(msg => { tx.textContent = msg; });
         }
-
-        // Mode 2: Open-Access Webhook Relay (Zero login for any visitor)
-        const relayUrl = getRelayUrl();
-        if (relayUrl) {
-          const tr = await fetch(`${relayUrl}/trigger`, { method: 'POST' });
-          const tj = await tr.json().catch(() => ({}));
-          if (!tr.ok) throw new Error(tj.error || `Relay returned HTTP ${tr.status}`);
-          for (let i = 0; i < 65; i++) {
-            await sleep(3000);
-            try {
-              const sr = await fetch(`${relayUrl}/status?t=${Date.now()}`, { cache: 'no-store' });
-              if (sr.ok) {
-                const st = await sr.json();
-                if (st.status === 'completed') {
-                  if (st.conclusion && st.conclusion !== 'success') {
-                    throw new Error(`Workflow finished with conclusion: ${st.conclusion}`);
-                  }
-                  tx.textContent = 'Publishing Signals...';
-                  for (let p = 0; p < 12; p++) {
-                    const fresh = await fetchLatestSignalsJson();
-                    if (fresh.generated_at !== prevStamp) {
-                      DATA = fresh;
-                      renderAll();
-                      return;
-                    }
-                    await sleep(3000);
-                  }
-                  await loadSignals();
-                  return;
-                }
-                tx.textContent = st.status === 'queued' ? 'Queued on GitHub...' : `Scanning Market (~${(i + 1) * 3}s)...`;
-              }
-            } catch (pollErr) {
-              if (String(pollErr.message).includes('conclusion')) throw pollErr;
-            }
-          }
-          await loadSignals();
-          return;
-        }
-
-        // Mode 3: Direct GitHub Actions workflow_dispatch via Fine-Grained Token
-        const ghToken = getGhToken();
-        if (ghToken) {
-          const dispatchTime = Date.now() - 5000;
-          const dispUrl = `https://api.github.com/repos/${REPO_INFO.owner}/${REPO_INFO.repo}/actions/workflows/${WORKFLOW_FILE}/dispatches`;
-          const dr = await fetch(dispUrl, {
-            method: 'POST',
-            headers: {
-              'Accept': 'application/vnd.github+json',
-              'Authorization': `Bearer ${ghToken}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ ref: 'main' })
-          });
-          if (!dr.ok) {
-            const errTxt = await dr.text();
-            throw new Error(`GitHub Actions dispatch failed (${dr.status}): ${errTxt}`);
-          }
-
-          tx.textContent = 'Queued on GitHub...';
-          for (let i = 0; i < 65; i++) {
-            await sleep(3000);
-            const runsUrl = `https://api.github.com/repos/${REPO_INFO.owner}/${REPO_INFO.repo}/actions/workflows/${WORKFLOW_FILE}/runs?per_page=3&t=${Date.now()}`;
-            const rr = await fetch(runsUrl, {
-              headers: {
-                'Accept': 'application/vnd.github+json',
-                'Authorization': `Bearer ${ghToken}`
-              },
-              cache: 'no-store'
-            });
-            if (rr.ok) {
-              const rj = await rr.json();
-              const latestRun = (rj.workflow_runs || []).find(w => Date.parse(w.created_at) >= dispatchTime);
-              if (latestRun) {
-                if (latestRun.status === 'completed') {
-                  if (latestRun.conclusion !== 'success') {
-                    throw new Error(`GitHub Action failed (${latestRun.conclusion}). Check Actions log.`);
-                  }
-                  tx.textContent = 'Fetching Fresh Signals...';
-                  await sleep(1500);
-                  DATA = await fetchLatestSignalsJson();
-                  renderAll();
-                  return;
-                }
-                tx.textContent = latestRun.status === 'queued'
-                  ? 'Waiting for Runner...'
-                  : `Scanning Live Market (${(i + 1) * 3}s)...`;
-              }
-            }
-          }
-          await loadSignals();
-          return;
-        }
-
-        // Fallback: Check if a newer scheduled scan is already online; otherwise prompt Cloud Scan Config
-        const checkLatest = await fetchLatestSignalsJson();
-        if (checkLatest.generated_at !== prevStamp) {
-          DATA = checkLatest;
-          renderAll();
-          return;
-        }
-        openScanConfigModal();
+        renderAll();
       } catch (e) {
         alert('Live scan error: ' + (e.message || e));
       } finally {
@@ -548,7 +1032,6 @@
 
       document.getElementById('asOfBadge').textContent = `Calendar Ref: ${m.as_of_date} | Option Quotes: ${DATA.signals[0]?.quote_date || m.vix_quote_date} | Updated: ${DATA.generated_at}`;
 
-      // Regime Banner
       let bannerStyle = 'border-teal-500/40 bg-teal-950/30';
       let pillStyle = 'bg-teal-500/20 text-teal-300 border-teal-500/40';
       if (m.regime_code === 'PANIC_CIRCUIT_BREAKER') {
@@ -570,7 +1053,6 @@
         <p class="text-xs text-slate-300 mt-2 leading-relaxed">${m.regime_guidance}</p>
       `;
 
-      // Filter base rows
       const rows = DATA.signals.filter(r => r.market_cap_b >= minMcap && (!q || r.symbol.includes(q) || r.company_name.toUpperCase().includes(q)));
       const entryRowsAll = rows.filter(r => r.window_bucket === 'ENTRY_WINDOW');
       const evaluatedEntries = entryRowsAll.map(r => ({ r, ev: evaluateRowUnderMode(r, mode, maxSpread, m, cap.available_idle_capacity_pct) }));
@@ -579,7 +1061,6 @@
       const exitRows = rows.filter(r => r.window_bucket === 'EXIT_ALERT');
       const watchRows = rows.filter(r => r.window_bucket === 'WATCHLIST_UPCOMING');
 
-      // KPI Grid
       document.getElementById('kpiGrid').innerHTML = `
         <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5">
           <div class="text-xs text-slate-400">Actionable Day -20 Entries</div>
@@ -690,8 +1171,7 @@
     }
 
     loadSignals();
-    // Auto-check every 30s so scheduled/dispatched GitHub Actions scans update open browsers live
-    setInterval(loadSignals, 30000);
+    setInterval(loadSignals, 60000);
   </script>
 </body>
 </html>

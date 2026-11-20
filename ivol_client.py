@@ -41,9 +41,9 @@ def load_ivol_credentials() -> dict[str, str]:
         except Exception:
             file_creds = {}
     return {
-        "api_key": os.environ.get("IVOL_API_KEY", file_creds.get("api_key", "")).strip(),
-        "username": os.environ.get("IVOL_USERNAME", file_creds.get("username", "")).strip(),
-        "password": os.environ.get("IVOL_PASSWORD", file_creds.get("password", "")).strip(),
+        "api_key": (os.environ.get("IVOL_API_KEY") or file_creds.get("api_key", "")).strip(),
+        "username": (os.environ.get("IVOL_USERNAME") or file_creds.get("username", "")).strip(),
+        "password": (os.environ.get("IVOL_PASSWORD") or file_creds.get("password", "")).strip(),
     }
 
 

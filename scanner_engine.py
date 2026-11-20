@@ -640,4 +640,27 @@ def run_portfolio_signal_scan(
     with open(SCREENER_OUT_DIR / "latest_signals.json", "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2)
     pd.DataFrame(candidates).to_csv(SCREENER_OUT_DIR / "latest_signals.csv", index=False)
+    compact_earn = [
+        {
+            "symbol": r.get("symbol", ""),
+            "name": r.get("name", ""),
+            "marketCap": r.get("marketCap", ""),
+            "time": r.get("time", ""),
+            "epsForecast": r.get("epsForecast", ""),
+            "report_date": r.get("report_date", ""),
+        }
+        for r in raw_earn_rows
+        if str(r.get("symbol", "")).strip()
+    ]
+    with open(SCREENER_OUT_DIR / "nasdaq_earnings_window.json", "w", encoding="utf-8") as f:
+        json.dump(
+            {
+                "as_of_date": ref_trading_day,
+                "generated_at": payload["generated_at"],
+                "macro_regime": macro,
+                "raw_earn_rows": compact_earn,
+            },
+            f,
+            separators=(",", ":"),
+        )
     return payload
