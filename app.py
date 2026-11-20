@@ -102,6 +102,7 @@ class ScreenerRequestHandler(BaseHTTPRequestHandler):
                 "api_key": str(body.get("api_key", "")).strip(),
                 "username": str(body.get("username", "")).strip(),
                 "password": str(body.get("password", "")).strip(),
+                "auth_mode": str(body.get("auth_mode", "")).strip() or ("api_key" if str(body.get("api_key", "")).strip() else "user_pass"),
             }
             CREDENTIALS_FILE.write_text(json.dumps(clean_creds, indent=2) + "\n", encoding="utf-8")
             self._send_json({"ok": True})

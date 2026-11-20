@@ -31,7 +31,10 @@
           <option value="unfiltered">Strategy Mode: Unfiltered &gt; $10B Baseline (+7.66% CAGR)</option>
         </select>
         <button onclick="openPineModal()" class="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 transition">Pine v6 Companion</button>
-        <button onclick="openCredModal()" class="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 transition">iVolatility API Keys</button>
+        <button id="credBtn" onclick="openCredModal()" class="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 transition flex items-center gap-1.5">
+          <span class="h-2 w-2 rounded-full bg-emerald-400"></span>
+          <span id="credBtnLabel">iVolatility API Keys</span>
+        </button>
         <button onclick="exportCsv()" class="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 transition">Export CSV</button>
         <button id="refreshBtn" onclick="triggerRefresh()" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white shadow transition flex items-center gap-2">
           <span id="refreshSpinner" class="hidden animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full"></span>
@@ -40,31 +43,84 @@
       </div>
     </div>
 
-    <!-- Credentials Modal (Identical to Original App) -->
+    <!-- Switch / Update iVolatility Account Modal -->
     <div id="credModal" class="hidden fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
-      <div class="bg-slate-900 border border-slate-700 rounded-xl max-w-md w-full p-5 space-y-4 shadow-2xl">
+      <div class="bg-slate-900 border border-slate-700 rounded-xl max-w-lg w-full p-5 space-y-4 shadow-2xl">
         <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-          <h2 class="text-sm font-bold text-white">Update iVolatility Credentials</h2>
-          <button onclick="closeCredModal()" class="text-slate-400 hover:text-white text-sm">&times;</button>
+          <div>
+            <h2 class="text-sm font-bold text-white">Switch / Update iVolatility API Account</h2>
+            <p class="text-[11px] text-slate-400 mt-0.5">Switch accounts anytime using either an API Key or Username &amp; Password</p>
+          </div>
+          <button onclick="closeCredModal()" class="text-slate-400 hover:text-white text-lg leading-none">&times;</button>
         </div>
-        <p class="text-xs text-slate-400 leading-relaxed">Pre-loaded from <code class="text-indigo-300">ivol_credentials.json</code>. Leave API Key blank if you want to authenticate strictly with Username &amp; Password.</p>
+
+        <!-- Quick Actions & Saved Account Profiles -->
+        <div class="flex flex-wrap items-center justify-between gap-2 bg-slate-950/70 border border-slate-800 rounded-lg p-2.5 text-xs">
+          <div class="flex items-center gap-2 flex-1 min-w-[200px]">
+            <span class="text-slate-400 whitespace-nowrap">Saved Accounts:</span>
+            <select id="savedAccountsSelect" onchange="selectSavedAccount(this.value)" class="flex-1 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-200 mono text-[11px]">
+              <option value="">-- Current Active Account --</option>
+            </select>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <button type="button" onclick="clearForNewAccount()" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-[11px] text-indigo-300 border border-slate-700">+ New Blank</button>
+            <button type="button" onclick="resetToRepoDefault()" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300 border border-slate-700">Repo Default</button>
+          </div>
+        </div>
+
+        <!-- Explicit Auth Method Selector -->
+        <div class="space-y-1.5 text-xs">
+          <label class="block text-slate-400 font-medium">Active Authentication Method</label>
+          <div class="grid grid-cols-2 gap-2">
+            <button type="button" id="modeBtnApiKey" onclick="setAuthMode('api_key')" class="px-3 py-2 rounded-lg border text-xs font-semibold transition text-center">
+              Authenticate via API Key
+            </button>
+            <button type="button" id="modeBtnUserPass" onclick="setAuthMode('user_pass')" class="px-3 py-2 rounded-lg border text-xs font-semibold transition text-center">
+              Authenticate via Username &amp; Password
+            </button>
+          </div>
+        </div>
+
+        <!-- Credential Inputs -->
         <div class="space-y-3 text-xs">
-          <div>
-            <label class="block text-slate-300 mb-1">iVolatility API Key</label>
-            <input id="inpApiKey" type="text" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 mono" placeholder="Enter API Key..." />
+          <div id="wrapApiKey">
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-slate-300 font-medium">iVolatility API Key</label>
+              <span id="badgeApiKeyActive" class="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">Active for Scan</span>
+            </div>
+            <input id="inpApiKey" type="text" oninput="onApiKeyInput()" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 mono focus:outline-none focus:border-indigo-500" placeholder="Enter iVolatility API Key..." />
           </div>
-          <div>
-            <label class="block text-slate-300 mb-1">iVolatility Username</label>
-            <input id="inpUsername" type="text" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 mono" placeholder="Enter Username..." />
-          </div>
-          <div>
-            <label class="block text-slate-300 mb-1">iVolatility Password</label>
-            <input id="inpPassword" type="password" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 mono" placeholder="Enter Password..." />
+
+          <div id="wrapUserPass" class="space-y-3 pt-1 border-t border-slate-800/80">
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-slate-300 font-medium">iVolatility Username</label>
+                <span id="badgeUserPassActive" class="hidden text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">Active for Scan</span>
+              </div>
+              <input id="inpUsername" type="text" oninput="onUserPassInput()" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 mono focus:outline-none focus:border-indigo-500" placeholder="Enter Username / Email..." />
+            </div>
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-slate-300 font-medium">iVolatility Password</label>
+                <button type="button" onclick="togglePasswordVisibility()" id="togglePwdBtn" class="text-[11px] text-slate-400 hover:text-slate-200">Show Password</button>
+              </div>
+              <input id="inpPassword" type="password" oninput="onUserPassInput()" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 mono focus:outline-none focus:border-indigo-500" placeholder="Enter Password..." />
+            </div>
           </div>
         </div>
-        <div class="flex justify-end gap-2 pt-2">
-          <button onclick="closeCredModal()" class="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-300">Cancel</button>
-          <button onclick="saveCredentials()" class="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white">Save Credentials</button>
+
+        <!-- Live Verification Banner -->
+        <div id="credStatusBox" class="hidden rounded-lg border px-3 py-2 text-xs leading-relaxed"></div>
+
+        <!-- Modal Footer -->
+        <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-800">
+          <button type="button" id="testCredBtn" onclick="testCredentialsInModal()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200">
+            Test Connection
+          </button>
+          <div class="flex items-center gap-2">
+            <button type="button" onclick="closeCredModal()" class="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-300">Cancel</button>
+            <button type="button" id="saveCredBtn" onclick="saveCredentials()" class="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white">Verify &amp; Switch Account</button>
+          </div>
         </div>
       </div>
     </div>
@@ -142,6 +198,9 @@
     let DATA = null;
     let CURRENT_TAB = 'entries';
     let HAS_PYTHON_BACKEND = null;
+    let MODAL_AUTH_MODE = 'api_key';
+    let MODAL_INITIAL_API_KEY = '';
+    let FORCE_FRESH_NEXT_SCAN = false;
 
     const SECONDARY_SHARE_CLASSES = new Set([
       "GOOG", "BRK/A", "BRK.A", "FOX", "PBR/A", "PBR.A",
@@ -166,25 +225,270 @@
       return HAS_PYTHON_BACKEND;
     }
 
+    // =========================================================================
+    // MULTI-ACCOUNT CREDENTIAL MANAGEMENT & LIVE API VERIFICATION
+    // =========================================================================
+    function normalizeCreds(raw) {
+      const api_key = String(raw?.api_key || '').trim();
+      const username = String(raw?.username || '').trim();
+      const password = String(raw?.password || '').trim();
+      let auth_mode = String(raw?.auth_mode || '').trim();
+      if (auth_mode !== 'api_key' && auth_mode !== 'user_pass') {
+        auth_mode = api_key ? 'api_key' : 'user_pass';
+      }
+      if (auth_mode === 'api_key' && !api_key && username && password) {
+        auth_mode = 'user_pass';
+      }
+      if (auth_mode === 'user_pass' && (!username || !password) && api_key) {
+        auth_mode = 'api_key';
+      }
+      return { api_key, username, password, auth_mode };
+    }
+
+    function accountFingerprint(c) {
+      const norm = normalizeCreds(c);
+      if (norm.auth_mode === 'user_pass') {
+        return `up_${norm.username}`;
+      }
+      return `ak_${norm.api_key.slice(0, 6)}_${norm.api_key.slice(-4)}`;
+    }
+
+    function formatAccountSummary(c) {
+      const norm = normalizeCreds(c);
+      if (norm.auth_mode === 'user_pass' && norm.username) {
+        return `iVolatility: ${norm.username} (User/Pass)`;
+      }
+      if (norm.api_key) {
+        const tail = norm.api_key.slice(-4);
+        const prefix = norm.username ? `${norm.username} • ` : '';
+        return `iVolatility: ${prefix}Key •••${tail}`;
+      }
+      return 'iVolatility API Keys';
+    }
+
+    async function fetchRepoDefaultCredentials() {
+      if (await checkPythonBackend()) {
+        const r = await fetch('/api/credentials', { cache: 'no-store' });
+        if (r.ok) return normalizeCreds(await r.json());
+      }
+      const r = await fetch(`./ivol_credentials.json?t=${Date.now()}`, { cache: 'no-store' });
+      if (r.ok) return normalizeCreds(await r.json());
+      return normalizeCreds({});
+    }
+
     async function loadCredentials() {
       const localOverride = localStorage.getItem('ivol_credentials_override');
       if (localOverride) {
-        try { return JSON.parse(localOverride); } catch (_) {}
+        try { return normalizeCreds(JSON.parse(localOverride)); } catch (_) {}
       }
-      if (await checkPythonBackend()) {
-        const r = await fetch('/api/credentials', { cache: 'no-store' });
-        if (r.ok) return await r.json();
+      return await fetchRepoDefaultCredentials();
+    }
+
+    function getSavedAccountsList() {
+      try {
+        const arr = JSON.parse(localStorage.getItem('ivol_saved_accounts_v1') || '[]');
+        return Array.isArray(arr) ? arr : [];
+      } catch (_) {
+        return [];
       }
-      const r = await fetch(`./ivol_credentials.json?t=${Date.now()}`, { cache: 'no-store' });
-      if (r.ok) return await r.json();
-      return { api_key: '', username: '', password: '' };
+    }
+
+    function rememberSavedAccount(creds) {
+      const norm = normalizeCreds(creds);
+      const id = accountFingerprint(norm);
+      const list = getSavedAccountsList().filter(x => accountFingerprint(x) !== id);
+      list.unshift(norm);
+      localStorage.setItem('ivol_saved_accounts_v1', JSON.stringify(list.slice(0, 8)));
+    }
+
+    async function refreshCredButtonBadge() {
+      try {
+        const c = await loadCredentials();
+        document.getElementById('credBtnLabel').textContent = formatAccountSummary(c);
+      } catch (_) {}
+    }
+
+    function setModalStatus(msg, isError = false) {
+      const box = document.getElementById('credStatusBox');
+      if (!msg) {
+        box.classList.add('hidden');
+        box.textContent = '';
+        return;
+      }
+      box.classList.remove('hidden');
+      box.className = isError
+        ? 'rounded-lg border px-3 py-2 text-xs leading-relaxed bg-rose-950/50 border-rose-500/40 text-rose-200'
+        : 'rounded-lg border px-3 py-2 text-xs leading-relaxed bg-emerald-950/50 border-emerald-500/40 text-emerald-200';
+      box.textContent = msg;
+    }
+
+    function setAuthMode(mode) {
+      MODAL_AUTH_MODE = mode === 'user_pass' ? 'user_pass' : 'api_key';
+      const btnAk = document.getElementById('modeBtnApiKey');
+      const btnUp = document.getElementById('modeBtnUserPass');
+      const badgeAk = document.getElementById('badgeApiKeyActive');
+      const badgeUp = document.getElementById('badgeUserPassActive');
+
+      if (MODAL_AUTH_MODE === 'api_key') {
+        btnAk.className = 'px-3 py-2 rounded-lg border text-xs font-semibold transition text-center bg-indigo-600/25 border-indigo-500 text-indigo-200';
+        btnUp.className = 'px-3 py-2 rounded-lg border text-xs font-semibold transition text-center bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200';
+        badgeAk.classList.remove('hidden');
+        badgeUp.classList.add('hidden');
+      } else {
+        btnUp.className = 'px-3 py-2 rounded-lg border text-xs font-semibold transition text-center bg-indigo-600/25 border-indigo-500 text-indigo-200';
+        btnAk.className = 'px-3 py-2 rounded-lg border text-xs font-semibold transition text-center bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200';
+        badgeUp.classList.remove('hidden');
+        badgeAk.classList.add('hidden');
+      }
+    }
+
+    function onApiKeyInput() {
+      setModalStatus('');
+      const ak = document.getElementById('inpApiKey').value.trim();
+      if (ak) setAuthMode('api_key');
+      else if (document.getElementById('inpUsername').value.trim()) setAuthMode('user_pass');
+    }
+
+    function onUserPassInput() {
+      setModalStatus('');
+      const currentAk = document.getElementById('inpApiKey').value.trim();
+      // If user edits Username/Password without entering a new API key, auto-select Username & Password mode
+      // so a previous account's leftover API key never overrides the new Username/Password!
+      if (!currentAk || currentAk === MODAL_INITIAL_API_KEY) {
+        setAuthMode('user_pass');
+      }
+    }
+
+    function togglePasswordVisibility() {
+      const inp = document.getElementById('inpPassword');
+      const btn = document.getElementById('togglePwdBtn');
+      if (inp.type === 'password') {
+        inp.type = 'text';
+        btn.textContent = 'Hide Password';
+      } else {
+        inp.type = 'password';
+        btn.textContent = 'Show Password';
+      }
+    }
+
+    function populateSavedAccountsDropdown(activeCreds) {
+      const sel = document.getElementById('savedAccountsSelect');
+      const list = getSavedAccountsList();
+      const activeId = accountFingerprint(activeCreds);
+      sel.innerHTML = '<option value="">-- Switch Saved Account --</option>' + list.map((item, idx) => {
+        const label = formatAccountSummary(item).replace('iVolatility: ', '');
+        const mark = accountFingerprint(item) === activeId ? ' (Active)' : '';
+        return `<option value="${idx}">${label}${mark}</option>`;
+      }).join('');
+    }
+
+    function selectSavedAccount(idxStr) {
+      if (idxStr === '') return;
+      const list = getSavedAccountsList();
+      const chosen = list[Number(idxStr)];
+      if (!chosen) return;
+      document.getElementById('inpApiKey').value = chosen.api_key || '';
+      document.getElementById('inpUsername').value = chosen.username || '';
+      document.getElementById('inpPassword').value = chosen.password || '';
+      MODAL_INITIAL_API_KEY = chosen.api_key || '';
+      setAuthMode(chosen.auth_mode || (chosen.api_key ? 'api_key' : 'user_pass'));
+      setModalStatus('Loaded saved account into form. Click "Verify & Switch Account" to activate.');
+    }
+
+    function clearForNewAccount() {
+      document.getElementById('inpApiKey').value = '';
+      document.getElementById('inpUsername').value = '';
+      document.getElementById('inpPassword').value = '';
+      MODAL_INITIAL_API_KEY = '';
+      setAuthMode('api_key');
+      setModalStatus('Cleared fields — enter your new iVolatility API Key or Username & Password.');
+    }
+
+    async function resetToRepoDefault() {
+      localStorage.removeItem('ivol_credentials_override');
+      const def = await fetchRepoDefaultCredentials();
+      document.getElementById('inpApiKey').value = def.api_key || '';
+      document.getElementById('inpUsername').value = def.username || '';
+      document.getElementById('inpPassword').value = def.password || '';
+      MODAL_INITIAL_API_KEY = def.api_key || '';
+      setAuthMode(def.auth_mode);
+      FORCE_FRESH_NEXT_SCAN = true;
+      await refreshCredButtonBadge();
+      setModalStatus('Restored repository default iVolatility credentials.');
+    }
+
+    function readModalCredsPayload() {
+      return normalizeCreds({
+        api_key: document.getElementById('inpApiKey').value.trim(),
+        username: document.getElementById('inpUsername').value.trim(),
+        password: document.getElementById('inpPassword').value.trim(),
+        auth_mode: MODAL_AUTH_MODE
+      });
+    }
+
+    async function verifyCredentialsLive(creds) {
+      const norm = normalizeCreds(creds);
+      let authQuery = '';
+      if (norm.auth_mode === 'user_pass') {
+        if (!norm.username || !norm.password) {
+          throw new Error('Please enter both Username and Password (or switch to API Key mode).');
+        }
+        const tr = await fetch(`https://restapi.ivolatility.com/token/get?username=${encodeURIComponent(norm.username)}&password=${encodeURIComponent(norm.password)}&_t=${Date.now()}`, { cache: 'no-store' });
+        if (!tr.ok) {
+          let detail = `HTTP ${tr.status}`;
+          try { const j = await tr.json(); detail = j.message || detail; } catch (_) {}
+          throw new Error(`Username/Password login failed: ${detail}`);
+        }
+        const tok = (await tr.text()).trim().replace(/^"|"$/g, '');
+        if (!tok) throw new Error('Empty token returned for Username/Password.');
+        authQuery = `token=${encodeURIComponent(tok)}`;
+      } else {
+        if (!norm.api_key) {
+          throw new Error('Please enter an API Key (or switch to Username & Password mode).');
+        }
+        authQuery = `apiKey=${encodeURIComponent(norm.api_key)}`;
+      }
+
+      // Verify data entitlement with a lightweight uncached option quote check
+      const probeDate = DATA?.signals?.[0]?.quote_date || '2026-11-19';
+      const pr = await fetch(`https://restapi.ivolatility.com/equities/eod/stock-opts-by-param?symbol=AAPL&tradeDate=${probeDate}&dteFrom=80&dteTo=100&moneynessFrom=-2&moneynessTo=2&cp=P&region=USA&${authQuery}&_t=${Date.now()}`, { cache: 'no-store' });
+      if (!pr.ok) {
+        let detail = `HTTP ${pr.status}`;
+        try { const j = await pr.json(); detail = j.message || detail; } catch (_) {}
+        throw new Error(`iVolatility API rejected credentials: ${detail}`);
+      }
+      return authQuery;
+    }
+
+    async function testCredentialsInModal() {
+      const btn = document.getElementById('testCredBtn');
+      btn.disabled = true;
+      btn.textContent = 'Testing...';
+      setModalStatus('Verifying credentials live against restapi.ivolatility.com...');
+      try {
+        const payload = readModalCredsPayload();
+        await verifyCredentialsLive(payload);
+        setModalStatus(`✓ Verified! ${formatAccountSummary(payload)} authenticated with iVolatility API.`);
+      } catch (err) {
+        setModalStatus(`✗ ${err.message || err}`, true);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Test Connection';
+      }
     }
 
     async function openCredModal() {
       const c = await loadCredentials();
+      rememberSavedAccount(c);
       document.getElementById('inpApiKey').value = c.api_key || '';
       document.getElementById('inpUsername').value = c.username || '';
       document.getElementById('inpPassword').value = c.password || '';
+      document.getElementById('inpPassword').type = 'password';
+      document.getElementById('togglePwdBtn').textContent = 'Show Password';
+      MODAL_INITIAL_API_KEY = c.api_key || '';
+      setAuthMode(c.auth_mode);
+      populateSavedAccountsDropdown(c);
+      setModalStatus('');
       document.getElementById('credModal').classList.remove('hidden');
     }
 
@@ -193,21 +497,39 @@
     }
 
     async function saveCredentials() {
-      const payload = {
-        api_key: document.getElementById('inpApiKey').value.trim(),
-        username: document.getElementById('inpUsername').value.trim(),
-        password: document.getElementById('inpPassword').value.trim()
-      };
-      localStorage.setItem('ivol_credentials_override', JSON.stringify(payload));
-      if (await checkPythonBackend()) {
-        await fetch('/api/credentials', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
+      const saveBtn = document.getElementById('saveCredBtn');
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Verifying...';
+      setModalStatus('Verifying account with iVolatility API...');
+      try {
+        const payload = readModalCredsPayload();
+        await verifyCredentialsLive(payload);
+
+        const prev = await loadCredentials();
+        if (accountFingerprint(prev) !== accountFingerprint(payload)) {
+          FORCE_FRESH_NEXT_SCAN = true;
+        }
+
+        localStorage.setItem('ivol_credentials_override', JSON.stringify(payload));
+        rememberSavedAccount(payload);
+
+        if (await checkPythonBackend()) {
+          await fetch('/api/credentials', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+        }
+
+        await refreshCredButtonBadge();
+        setModalStatus(`✓ Switched active account to ${formatAccountSummary(payload)}.`);
+        setTimeout(() => closeCredModal(), 650);
+      } catch (err) {
+        setModalStatus(`✗ ${err.message || err}`, true);
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Verify & Switch Account';
       }
-      closeCredModal();
-      alert('Saved iVolatility credentials. Next live scan will use them immediately.');
     }
 
     async function openPineModal() {
@@ -276,11 +598,10 @@
 
     // =========================================================================
     // BROWSER-NATIVE LIVE SCANNER (100% Exact Port of scanner_engine.py + ivol_client.py)
-    // Runs directly in the browser via CORS-enabled restapi.ivolatility.com!
     // =========================================================================
     function openIdbCache() {
-      return new Promise((resolve, reject) => {
-        const req = indexedDB.open('PreEarningsIvolCache_v1', 1);
+      return new Promise(resolve => {
+        const req = indexedDB.open('PreEarningsIvolCache_v2', 1);
         req.onupgradeneeded = e => {
           const db = e.target.result;
           if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv');
@@ -291,6 +612,7 @@
     }
 
     async function idbGet(key) {
+      if (FORCE_FRESH_NEXT_SCAN) return null;
       const db = await openIdbCache();
       if (!db) return null;
       return new Promise(res => {
@@ -332,7 +654,7 @@
 
     function nearestWorkdayUTC(year, month1, day) {
       const dt = new Date(Date.UTC(year, month1 - 1, day));
-      const wd = dt.getUTCDay(); // 0=Sun, 6=Sat
+      const wd = dt.getUTCDay();
       if (wd === 6) return addDaysUTC(dt, -1);
       if (wd === 0) return addDaysUTC(dt, 1);
       return dt;
@@ -373,16 +695,16 @@
       const hols = new Set();
       for (const y of years) {
         hols.add(fmtDateUTC(nearestWorkdayUTC(y, 1, 1)));
-        hols.add(fmtDateUTC(nearestWorkdayUTC(y + 1, 1, 1))); // handles Dec 31 observance
-        hols.add(fmtDateUTC(nthWeekdayOfMonthUTC(y, 1, 1, 3)));  // MLK (3rd Mon Jan)
-        hols.add(fmtDateUTC(nthWeekdayOfMonthUTC(y, 2, 1, 3)));  // Presidents (3rd Mon Feb)
-        hols.add(fmtDateUTC(goodFridayUTC(y)));                  // Good Friday
-        hols.add(fmtDateUTC(lastWeekdayOfMonthUTC(y, 5, 1)));    // Memorial (Last Mon May)
-        if (y >= 2022) hols.add(fmtDateUTC(nearestWorkdayUTC(y, 6, 19))); // Juneteenth
-        hols.add(fmtDateUTC(nearestWorkdayUTC(y, 7, 4)));        // Independence Day
-        hols.add(fmtDateUTC(nthWeekdayOfMonthUTC(y, 9, 1, 1)));  // Labor Day (1st Mon Sep)
-        hols.add(fmtDateUTC(nthWeekdayOfMonthUTC(y, 11, 4, 4))); // Thanksgiving (4th Thu Nov)
-        hols.add(fmtDateUTC(nearestWorkdayUTC(y, 12, 25)));      // Christmas
+        hols.add(fmtDateUTC(nearestWorkdayUTC(y + 1, 1, 1)));
+        hols.add(fmtDateUTC(nthWeekdayOfMonthUTC(y, 1, 1, 3)));
+        hols.add(fmtDateUTC(nthWeekdayOfMonthUTC(y, 2, 1, 3)));
+        hols.add(fmtDateUTC(goodFridayUTC(y)));
+        hols.add(fmtDateUTC(lastWeekdayOfMonthUTC(y, 5, 1)));
+        if (y >= 2022) hols.add(fmtDateUTC(nearestWorkdayUTC(y, 6, 19)));
+        hols.add(fmtDateUTC(nearestWorkdayUTC(y, 7, 4)));
+        hols.add(fmtDateUTC(nthWeekdayOfMonthUTC(y, 9, 1, 1)));
+        hols.add(fmtDateUTC(nthWeekdayOfMonthUTC(y, 11, 4, 4)));
+        hols.add(fmtDateUTC(nearestWorkdayUTC(y, 12, 25)));
       }
       return hols;
     }
@@ -503,18 +825,26 @@
       return totalValid > 1000 ? smdMap : {};
     }
 
-    async function resolveIvolAuthQuery() {
+    async function resolveIvolAuthSession() {
       const creds = await loadCredentials();
-      if (creds.api_key) {
-        return `apiKey=${encodeURIComponent(creds.api_key)}`;
-      }
-      if (creds.username && creds.password) {
-        const r = await fetch(`https://restapi.ivolatility.com/token/get?username=${encodeURIComponent(creds.username)}&password=${encodeURIComponent(creds.password)}`);
-        if (!r.ok) throw new Error(`iVolatility login failed (${r.status})`);
+      const acctTag = accountFingerprint(creds);
+      if (creds.auth_mode === 'user_pass') {
+        if (!creds.username || !creds.password) {
+          throw new Error('Missing Username or Password. Click "iVolatility API Keys" to enter credentials.');
+        }
+        const r = await fetch(`https://restapi.ivolatility.com/token/get?username=${encodeURIComponent(creds.username)}&password=${encodeURIComponent(creds.password)}&_t=${Date.now()}`, { cache: 'no-store' });
+        if (!r.ok) {
+          let msg = `HTTP ${r.status}`;
+          try { const j = await r.json(); msg = j.message || msg; } catch (_) {}
+          throw new Error(`iVolatility login failed (${msg})`);
+        }
         const tok = (await r.text()).trim().replace(/^"|"$/g, '');
-        return `token=${encodeURIComponent(tok)}`;
+        return { authQuery: `token=${encodeURIComponent(tok)}`, acctTag };
       }
-      throw new Error('Please enter your iVolatility API Key or Username/Password in iVolatility API Keys.');
+      if (creds.api_key) {
+        return { authQuery: `apiKey=${encodeURIComponent(creds.api_key)}`, acctTag };
+      }
+      throw new Error('Please enter your iVolatility API Key or Username/Password in "iVolatility API Keys".');
     }
 
     let _lastIvolCallTs = 0;
@@ -525,8 +855,8 @@
       _lastIvolCallTs = performance.now();
     }
 
-    async function fetchIvolSmdForDate(tradeDate, authQuery, whitelistSet, onProgress) {
-      const cacheKey = `smd_ALL_USA_${tradeDate}`;
+    async function fetchIvolSmdForDate(tradeDate, authQuery, acctTag, whitelistSet, onProgress) {
+      const cacheKey = `${acctTag}_smd_ALL_USA_${tradeDate}`;
       const cached = await idbGet(cacheKey);
       if (cached && Object.keys(cached).length > 500) {
         return cached;
@@ -534,9 +864,13 @@
 
       await ivolThrottle();
       const url = `https://restapi.ivolatility.com/equities/stock-market-data?stockGroup=ALL_USA&from=${tradeDate}&to=${tradeDate}&${authQuery}`;
-      const resp = await fetch(url);
+      const resp = await fetch(url, { cache: 'no-store' });
       if (resp.status === 204) return {};
-      if (!resp.ok) throw new Error(`iVolatility SMD HTTP ${resp.status}`);
+      if (!resp.ok) {
+        let msg = `HTTP ${resp.status}`;
+        try { const j = await resp.json(); msg = j.message || msg; } catch (_) {}
+        throw new Error(`iVolatility SMD error: ${msg}`);
+      }
 
       const ctype = resp.headers.get('content-type') || '';
       let csvText = '';
@@ -561,7 +895,7 @@
           onProgress(`Preparing iVolatility ALL_USA (${tradeDate})...`);
           await ivolThrottle();
           const sep = detUrl.includes('?') ? '&' : '?';
-          const dr = await fetch(`${detUrl}${sep}${authQuery}`);
+          const dr = await fetch(`${detUrl}${sep}${authQuery}`, { cache: 'no-store' });
           if (!dr.ok) throw new Error(`iVolatility details HTTP ${dr.status}`);
           const dj = await dr.json();
           const st = dj?.[0]?.meta?.status;
@@ -589,7 +923,7 @@
       return parsedMap;
     }
 
-    async function fetchBest90dAtmPutBrowser(symbol, quoteDate, fallbackSpot, authQuery) {
+    async function fetchBest90dAtmPutBrowser(symbol, quoteDate, fallbackSpot, authQuery, acctTag) {
       const emptyRes = {
         opt_matched: false, option_symbol: "", expiration_date: "", dte: null,
         strike: null, bid: null, ask: null, mid: null, limit_25_price: null,
@@ -602,14 +936,19 @@
 
       let rows = [];
       for (const qs of qCands) {
-        const cKey = `opts_${qs}_${quoteDate}_55_135_-12_12_P`;
+        const cKey = `${acctTag}_opts_${qs}_${quoteDate}_55_135_-12_12_P`;
         const cached = await idbGet(cKey);
         if (cached !== null) {
           rows = cached;
         } else {
           await ivolThrottle();
           const u = `https://restapi.ivolatility.com/equities/eod/stock-opts-by-param?symbol=${encodeURIComponent(qs)}&tradeDate=${quoteDate}&dteFrom=55&dteTo=135&moneynessFrom=-12&moneynessTo=12&cp=P&region=USA&${authQuery}`;
-          const r = await fetch(u);
+          const r = await fetch(u, { cache: 'no-store' });
+          if (r.status === 401 || r.status === 403) {
+            let msg = `HTTP ${r.status}`;
+            try { const j = await r.json(); msg = j.message || msg; } catch (_) {}
+            throw new Error(`iVolatility auth error: ${msg}`);
+          }
           if (r.ok && r.status !== 204) {
             const j = await r.json();
             rows = Array.isArray(j) ? j : (j.data || []);
@@ -678,9 +1017,8 @@
 
     async function runBrowserLiveScan(onProgress) {
       const t0 = performance.now();
-      const authQuery = await resolveIvolAuthQuery();
+      const { authQuery, acctTag } = await resolveIvolAuthSession();
 
-      // Determine today's date in NYSE timezone (America/New_York)
       const nyStr = new Intl.DateTimeFormat('en-CA', {
         timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit'
       }).format(new Date());
@@ -703,7 +1041,6 @@
       const macro = earnWin?.macro_regime ? { ...earnWin.macro_regime, as_of_date: refTradingDay } : { ...DATA.macro_regime, as_of_date: refTradingDay };
       const rawEarnRows = (earnWin?.raw_earn_rows || []).slice().sort((a, b) => String(a.report_date || '').localeCompare(String(b.report_date || '')));
 
-      // Load latest iVolatility ALL_USA universe (offsets 0..7)
       let smdMap = {};
       let smdDate = nyStr;
       for (let offset = 0; offset < 8; offset++) {
@@ -712,7 +1049,7 @@
         if (wd === 0 || wd === 6) continue;
         const candStr = fmtDateUTC(candDt);
         onProgress(`Checking iVolatility EOD (${candStr})...`);
-        const tryMap = await fetchIvolSmdForDate(candStr, authQuery, commonWhitelist, onProgress);
+        const tryMap = await fetchIvolSmdForDate(candStr, authQuery, acctTag, commonWhitelist, onProgress);
         if (Object.keys(tryMap).length > 500) {
           smdMap = tryMap;
           smdDate = candStr;
@@ -833,11 +1170,14 @@
         const c = chainTargets[idx];
         onProgress(`Pricing 90D Put Chains (${idx + 1}/${chainTargets.length}: ${c.symbol})...`);
         try {
-          optResults[c.symbol] = await fetchBest90dAtmPutBrowser(c.symbol, smdDate, c.spot_price, authQuery);
-        } catch (_) {
+          optResults[c.symbol] = await fetchBest90dAtmPutBrowser(c.symbol, smdDate, c.spot_price, authQuery, acctTag);
+        } catch (chainErr) {
+          if (String(chainErr.message || '').includes('auth error')) throw chainErr;
           optResults[c.symbol] = { opt_matched: false };
         }
       }
+
+      FORCE_FRESH_NEXT_SCAN = false;
 
       for (const c of candidates) {
         Object.assign(c, optResults[c.symbol] || { opt_matched: false });
@@ -1170,6 +1510,7 @@
       }).join('');
     }
 
+    refreshCredButtonBadge();
     loadSignals();
     setInterval(loadSignals, 60000);
   </script>

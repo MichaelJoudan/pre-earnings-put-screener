@@ -1,7 +1,6 @@
 """
-Cloud & GitHub Actions Ready iVolatility EOD REST API Client.
-Reads credentials from environment variables (GitHub Actions Secrets / Cloud Env)
-with optional fallback to local `ivol_credentials.json`.
+Cloud & Local iVolatility EOD REST API Client.
+Supports switching seamlessly between API Key authentication and Username/Password token authentication.
 """
 from __future__ import annotations
 
@@ -40,10 +39,17 @@ def load_ivol_credentials() -> dict[str, str]:
             file_creds = json.loads(CREDENTIALS_FILE.read_text(encoding="utf-8"))
         except Exception:
             file_creds = {}
+    api_key = (os.environ.get("IVOL_API_KEY") or file_creds.get("api_key", "")).strip()
+    username = (os.environ.get("IVOL_USERNAME") or file_creds.get("username", "")).strip()
+    password = (os.environ.get("IVOL_PASSWORD") or file_creds.get("password", "")).strip()
+    auth_mode = (os.environ.get("IVOL_AUTH_MODE") or file_creds.get("auth_mode", "")).strip()
+    if auth_mode not in ("api_key", "user_pass"):
+        auth_mode = "api_key" if api_key else "user_pass"
     return {
-        "api_key": (os.environ.get("IVOL_API_KEY") or file_creds.get("api_key", "")).strip(),
-        "username": (os.environ.get("IVOL_USERNAME") or file_creds.get("username", "")).strip(),
-        "password": (os.environ.get("IVOL_PASSWORD") or file_creds.get("password", "")).strip(),
+        "api_key": api_key,
+        "username": username,
+        "password": password,
+        "auth_mode": auth_mode,
     }
 
 
@@ -59,23 +65,31 @@ class IVolClient:
         api_key: str | None = None,
         username: str | None = None,
         password: str | None = None,
+        auth_mode: str | None = None,
         cache_dir: Path = CACHE_DIR,
     ) -> None:
         creds = load_ivol_credentials()
         self.api_key = creds["api_key"] if api_key is None else api_key
         self.username = creds["username"] if username is None else username
         self.password = creds["password"] if password is None else password
+        self.auth_mode = creds["auth_mode"] if auth_mode is None else auth_mode
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self._query_auth_params: dict[str, str] = {}
 
-        if self.api_key:
+        use_user_pass = (self.auth_mode == "user_pass" and self.username and self.password) or (
+            not self.api_key and self.username and self.password
+        )
+
+        if use_user_pass:
+            tok = ivol.getToken(self.username, self.password).strip().strip('"')
+            ivol.setLoginParams(username=self.username, password=self.password, token=tok)
+            self._query_auth_params = {"token": tok}
+        elif self.api_key:
             ivol.setLoginParams(apiKey=self.api_key)
-        elif self.username and self.password:
-            ivol.setLoginParams(username=self.username, password=self.password)
         else:
             raise ValueError(
-                "Missing iVolatility credentials. Configure IVOL_API_KEY (or IVOL_USERNAME & IVOL_PASSWORD) "
-                "in GitHub Actions Secrets / environment variables."
+                "Missing iVolatility credentials. Enter an API Key or Username & Password in iVolatility API Keys."
             )
 
         _polite_retry = Retry(total=2, backoff_factor=1.5, status_forcelist=[500, 502, 503, 504])
@@ -138,7 +152,12 @@ class IVolClient:
         for attempt in range(1, 7):
             try:
                 self._throttle()
-                resp = ivol_mod._session.get(url, auth=ivol_mod.__auth__, timeout=120)
+                resp = ivol_mod._session.get(
+                    url,
+                    params=self._query_auth_params or None,
+                    auth=ivol_mod.__auth__,
+                    timeout=120,
+                )
                 if resp.status_code == 429:
                     time.sleep(10.0 * attempt)
                     continue
@@ -178,7 +197,12 @@ class IVolClient:
         dl_url = None
         while time.time() - start < timeout:
             self._throttle()
-            r = ivol_mod._session.get(det_url, auth=ivol_mod.__auth__, timeout=120)
+            r = ivol_mod._session.get(
+                det_url,
+                params=self._query_auth_params or None,
+                auth=ivol_mod.__auth__,
+                timeout=120,
+            )
             r.raise_for_status()
             j = r.json()
             status = j[0]["meta"]["status"]
