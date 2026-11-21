@@ -143,6 +143,91 @@
       </div>
     </div>
 
+    <!-- Live 1-Second Option & Stock Quote Bubble -->
+    <div id="liveQuoteBubbleWrap" class="hidden fixed inset-0 z-50 pointer-events-none flex items-end justify-end p-4 sm:p-6">
+      <div class="pointer-events-auto bg-slate-900/95 backdrop-blur-md border border-indigo-500/50 rounded-2xl max-w-md w-full p-4 space-y-3.5 shadow-2xl ring-1 ring-slate-700/80">
+        <!-- Bubble Header -->
+        <div class="flex items-start justify-between gap-3 border-b border-slate-800 pb-3">
+          <div class="min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span id="lbSymbol" class="text-lg font-extrabold tracking-tight text-white mono">-</span>
+              <span id="lbLiveBadge" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 mono">
+                <span id="lbPulseDot" class="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+                <span id="lbStatusText">LIVE 1s</span>
+              </span>
+              <span id="lbTickMeta" class="text-[10px] text-slate-400 mono">#0</span>
+            </div>
+            <div id="lbCompany" class="text-xs text-slate-400 truncate mt-0.5">-</div>
+            <div id="lbSubMeta" class="text-[11px] text-slate-400 mono mt-1">-</div>
+          </div>
+          <button type="button" onclick="closeLiveBubble()" title="Close &amp; Stop 1s API Stream" class="h-7 w-7 rounded-lg bg-slate-800 hover:bg-rose-600/80 border border-slate-700 hover:border-rose-500 text-slate-300 hover:text-white flex items-center justify-center text-sm font-bold transition shrink-0">
+            &times;
+          </button>
+        </div>
+
+        <!-- Live Stock Price + Strategy Put Contract Parameters -->
+        <div class="grid grid-cols-2 gap-2.5 text-xs">
+          <div class="bg-slate-950/90 border border-slate-800 rounded-xl p-3">
+            <div class="text-[11px] text-slate-400">Live Stock Price</div>
+            <div id="lbSpotPrice" class="text-xl font-bold text-white mono mt-0.5 transition-colors duration-200">$--.--</div>
+            <div id="lbSpotDelta" class="text-[10px] text-slate-400 mono mt-0.5">Waiting for feed...</div>
+          </div>
+          <div class="bg-slate-950/90 border border-slate-800 rounded-xl p-3">
+            <div class="text-[11px] text-slate-400">Strategy 3M Put to Sell</div>
+            <div id="lbPutSpec" class="text-sm font-bold text-indigo-300 mono mt-0.5">--</div>
+            <div id="lbPutExpDte" class="text-[10px] text-slate-300 mono mt-0.5">Exp: --</div>
+          </div>
+        </div>
+
+        <!-- OCC Contract Symbol Bar -->
+        <div class="flex items-center justify-between bg-slate-950/70 border border-slate-800/90 rounded-lg px-3 py-1.5 text-[11px]">
+          <div class="text-slate-400">Contract: <span id="lbOccSymbol" class="text-slate-200 font-semibold mono">--</span></div>
+          <button type="button" onclick="copyBubbleText('lbOccSymbol', this)" class="text-[10px] px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition">Copy OCC</button>
+        </div>
+
+        <!-- Live Bid / Ask / Mid Grid -->
+        <div class="grid grid-cols-3 gap-2 text-center bg-slate-950/90 border border-slate-800 rounded-xl p-2.5">
+          <div>
+            <div class="text-[10px] uppercase tracking-wider text-slate-400">Live Bid</div>
+            <div id="lbBid" class="text-base font-bold text-slate-100 mono mt-0.5">$--.--</div>
+            <div id="lbBidSize" class="text-[10px] text-slate-500 mono">sz -</div>
+          </div>
+          <div class="border-x border-slate-800/80">
+            <div class="text-[10px] uppercase tracking-wider text-slate-400">Midpoint</div>
+            <div id="lbMid" class="text-base font-semibold text-slate-200 mono mt-0.5">$--.--</div>
+            <div id="lbSpreadInfo" class="text-[10px] text-slate-400 mono">HS -</div>
+          </div>
+          <div>
+            <div class="text-[10px] uppercase tracking-wider text-slate-400">Live Ask</div>
+            <div id="lbAsk" class="text-base font-bold text-slate-100 mono mt-0.5">$--.--</div>
+            <div id="lbAskSize" class="text-[10px] text-slate-500 mono">sz -</div>
+          </div>
+        </div>
+
+        <!-- 25%-Mid Limit Order Callout -->
+        <div class="bg-indigo-950/40 border border-indigo-500/50 rounded-xl p-3 flex items-center justify-between gap-3">
+          <div>
+            <div class="text-[11px] font-semibold text-indigo-300 uppercase tracking-wide">Send Sell Limit Order (25%-Mid)</div>
+            <div class="flex items-baseline gap-2 mt-0.5">
+              <span id="lbLimit25" class="text-2xl font-extrabold text-emerald-400 mono">$--.--</span>
+              <span id="lbCreditPct" class="text-xs text-slate-300 mono">(--% credit)</span>
+            </div>
+            <div id="lbLimitFormula" class="text-[10px] text-slate-400 mono mt-0.5">Mid &minus; 25% of Half-Spread</div>
+          </div>
+          <button type="button" onclick="copyBubbleLimitPrice(this)" class="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white shadow transition shrink-0">
+            Copy Limit
+          </button>
+        </div>
+
+        <!-- Live Greeks & Quote Timestamp Footer -->
+        <div class="flex items-center justify-between text-[10px] text-slate-400 mono pt-0.5">
+          <span id="lbGreeks">IV --% &bull; &Delta; -- &bull; &Theta; -- &bull; OI --</span>
+          <span id="lbQuoteTs">--</span>
+        </div>
+        <div id="lbErrorBox" class="hidden rounded-lg border border-rose-500/40 bg-rose-950/50 px-3 py-2 text-[11px] text-rose-200"></div>
+      </div>
+    </div>
+
     <!-- Macro Regime Banner -->
     <div id="regimeBanner" class="rounded-xl border p-4 bg-slate-900/90 border-slate-800"></div>
 
@@ -1495,16 +1580,19 @@
              <div class="text-[11px] text-indigo-300 font-semibold mono">Sell Limit: $${r.limit_25_price?.toFixed(2)}</div>`
           : `-`;
         return `
-          <tr class="hover:bg-slate-800/40 transition">
-            <td class="px-3.5 py-3">
+          <tr class="group hover:bg-slate-800/50 transition">
+            <td onclick="openLiveQuoteBubble('${r.symbol}')" class="px-3.5 py-3 cursor-pointer" title="Click for 1s Live Put Quote (${r.symbol})">
               <span class="inline-block px-2.5 py-1 rounded border text-[11px] font-semibold ${ev.cls}">${ev.badge}</span>
             </td>
-            <td class="px-3.5 py-3">
-              <div class="font-bold text-white mono">${r.symbol}</div>
+            <td onclick="openLiveQuoteBubble('${r.symbol}')" class="px-3.5 py-3 cursor-pointer" title="Click to stream 1s live API quotes for ${r.symbol}">
+              <div class="flex items-center gap-1.5">
+                <span class="font-bold text-white group-hover:text-indigo-300 underline decoration-slate-600 group-hover:decoration-indigo-400 decoration-dotted underline-offset-4 mono transition">${r.symbol}</span>
+                <span class="text-[9px] px-1.5 py-0.2 rounded bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 opacity-75 group-hover:opacity-100 mono">LIVE</span>
+              </div>
               <div class="text-[11px] text-slate-400 truncate max-w-[180px]" title="${safeName}">${safeName}</div>
             </td>
-            <td class="px-3.5 py-3 text-right mono text-slate-200">$${r.market_cap_b.toFixed(1)}B</td>
-            <td class="px-3.5 py-3">
+            <td onclick="openLiveQuoteBubble('${r.symbol}')" class="px-3.5 py-3 text-right mono text-slate-200 cursor-pointer" title="Click for 1s Live Put Quote (${r.symbol})">$${r.market_cap_b.toFixed(1)}B</td>
+            <td onclick="openLiveQuoteBubble('${r.symbol}')" class="px-3.5 py-3 cursor-pointer" title="Click for 1s Live Put Quote (${r.symbol})">
               <div class="mono text-slate-200">${r.report_date} <span class="text-[11px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">${r.release_timing}</span></div>
               <div class="text-[11px] text-slate-400 mono">Exit: ${r.scheduled_exit_date}</div>
             </td>
@@ -1522,6 +1610,375 @@
           </tr>
         `;
       }).join('');
+    }
+
+    // =========================================================================
+    // LIVE 1-SECOND REAL-TIME STOCK & STRATEGY PUT QUOTE BUBBLE
+    // =========================================================================
+    let LIVE_BUBBLE_SESSION_ID = 0;
+    let LIVE_BUBBLE_ABORT_CTRL = null;
+    let LIVE_BUBBLE_TIMER = null;
+    let LIVE_BUBBLE_LAST_SPOT = null;
+    let LIVE_BUBBLE_LAST_LIMIT = null;
+
+    function closeLiveBubble() {
+      LIVE_BUBBLE_SESSION_ID++;
+      if (LIVE_BUBBLE_TIMER) {
+        clearTimeout(LIVE_BUBBLE_TIMER);
+        LIVE_BUBBLE_TIMER = null;
+      }
+      if (LIVE_BUBBLE_ABORT_CTRL) {
+        try { LIVE_BUBBLE_ABORT_CTRL.abort(); } catch (_) {}
+        LIVE_BUBBLE_ABORT_CTRL = null;
+      }
+      document.getElementById('liveQuoteBubbleWrap').classList.add('hidden');
+    }
+
+    async function copyBubbleText(elId, btnEl) {
+      const txt = (document.getElementById(elId)?.textContent || '').trim();
+      if (!txt || txt === '--') return;
+      await navigator.clipboard.writeText(txt);
+      const orig = btnEl.textContent;
+      btnEl.textContent = 'Copied!';
+      setTimeout(() => { btnEl.textContent = orig; }, 1200);
+    }
+
+    async function copyBubbleLimitPrice(btnEl) {
+      if (LIVE_BUBBLE_LAST_LIMIT == null) return;
+      await navigator.clipboard.writeText(LIVE_BUBBLE_LAST_LIMIT.toFixed(2));
+      const orig = btnEl.textContent;
+      btnEl.textContent = 'Copied $' + LIVE_BUBBLE_LAST_LIMIT.toFixed(2);
+      setTimeout(() => { btnEl.textContent = orig; }, 1400);
+    }
+
+    function rankPutPoolForSpot(pool, refSpot, todayDt) {
+      const scored = [];
+      for (const item of pool) {
+        const expS = String(item.expiration_date || item.expirationDate || '').slice(0, 10);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(expS)) continue;
+        const dExp = parseDateUTC(expS);
+        const dteV = Math.round((dExp.getTime() - todayDt.getTime()) / 86400000);
+        if (dteV < 55 || dteV > 135) continue;
+        const ks = Number(item.price_strike ?? item.strike);
+        if (!Number.isFinite(ks) || ks <= 0 || !Number.isFinite(refSpot) || refSpot <= 0) continue;
+        const relM = Math.abs(ks - refSpot) / refSpot;
+        const tf = thirdFridayUTC(dExp.getUTCFullYear(), dExp.getUTCMonth() + 1);
+        const isMonthly = Math.abs((dExp.getTime() - tf.getTime()) / 86400000) <= 1;
+        const monthlyPen = isMonthly ? 0.0 : 0.005;
+        const oiV = Number(item.openinterest ?? item.openInterest ?? 0) || 0;
+        const score = relM + 0.0015 * Math.abs(dteV - 90) + monthlyPen;
+        const sym = String(item.option_symbol || item.symbol || '').trim();
+        if (!sym) continue;
+        scored.push({ sym, ks, expS, dteV, isMonthly, relM, oiV, score, raw: item });
+      }
+      scored.sort((a, b) => (a.score - b.score) || (b.oiV - a.oiV));
+      return scored;
+    }
+
+    async function discoverCandidatePutPool(symbol, rowObj, authQuery, todayDt, signal) {
+      const qCands = [symbol];
+      if (symbol.includes('/')) qCands.push(symbol.replace(/\//g, '.'));
+      else if (symbol.includes('.')) qCands.push(symbol.replace(/\./g, '/'));
+
+      const tdList = [];
+      if (rowObj?.quote_date) tdList.push(rowObj.quote_date);
+      for (let off = 0; off <= 6; off++) {
+        const d = addDaysUTC(todayDt, -off);
+        const wd = d.getUTCDay();
+        if (wd >= 1 && wd <= 5) {
+          const ds = fmtDateUTC(d);
+          if (!tdList.includes(ds)) tdList.push(ds);
+        }
+      }
+
+      for (const qs of qCands) {
+        for (const td of tdList) {
+          const cKey = `lb_chain20_${qs}_${td}`;
+          const cached = await idbGet(cKey);
+          if (cached && cached.length > 0) return cached;
+
+          const u = `https://restapi.ivolatility.com/equities/eod/stock-opts-by-param?symbol=${encodeURIComponent(qs)}&tradeDate=${td}&dteFrom=50&dteTo=140&moneynessFrom=-20&moneynessTo=20&cp=P&region=USA&${authQuery}`;
+          const r = await fetch(u, { cache: 'no-store', signal });
+          if (r.status === 400 || r.status === 401 || r.status === 403) {
+            let msg = `HTTP ${r.status}`;
+            try { const j = await r.json(); msg = j.message || msg; } catch (_) {}
+            if (String(msg).includes('Limit is not found')) {
+              throw new Error('Current iVolatility account has 0 remaining API quota ("Limit is not found"). Click "iVolatility" in the top bar to switch accounts.');
+            }
+            if (r.status === 401 || r.status === 403) throw new Error(`iVolatility auth error: ${msg}`);
+          }
+          if (r.ok && r.status !== 204) {
+            const j = await r.json();
+            const arr = Array.isArray(j) ? j : (j.data || []);
+            if (arr.length > 0) {
+              await idbSet(cKey, arr);
+              return arr;
+            }
+          }
+        }
+      }
+      if (rowObj?.option_symbol) {
+        return [{
+          option_symbol: rowObj.option_symbol,
+          price_strike: rowObj.strike,
+          expiration_date: rowObj.expiration_date,
+          openinterest: rowObj.opt_oi || 0
+        }];
+      }
+      return [];
+    }
+
+    function renderBubbleTick(rowObj, bestPick, liveSpot, tickCount, latencyMs, isFallbackEod) {
+      const maxSpread = parseFloat(document.getElementById('maxSpreadInput').value || '0.35');
+      const spotEl = document.getElementById('lbSpotPrice');
+
+      if (LIVE_BUBBLE_LAST_SPOT !== null && Number.isFinite(liveSpot)) {
+        if (liveSpot > LIVE_BUBBLE_LAST_SPOT) {
+          spotEl.className = 'text-xl font-bold text-emerald-400 mono mt-0.5 transition-colors duration-200';
+        } else if (liveSpot < LIVE_BUBBLE_LAST_SPOT) {
+          spotEl.className = 'text-xl font-bold text-rose-400 mono mt-0.5 transition-colors duration-200';
+        } else {
+          spotEl.className = 'text-xl font-bold text-white mono mt-0.5 transition-colors duration-200';
+        }
+      }
+      LIVE_BUBBLE_LAST_SPOT = liveSpot;
+
+      spotEl.textContent = Number.isFinite(liveSpot) ? `$${liveSpot.toFixed(2)}` : '$--.--';
+      if (rowObj?.spot_price && Number.isFinite(liveSpot)) {
+        const diff = liveSpot - rowObj.spot_price;
+        const pct = (diff / rowObj.spot_price) * 100.0;
+        const sign = diff >= 0 ? '+' : '';
+        document.getElementById('lbSpotDelta').textContent = `${sign}${diff.toFixed(2)} (${sign}${pct.toFixed(2)}%) vs EOD $${rowObj.spot_price.toFixed(2)}`;
+      } else {
+        document.getElementById('lbSpotDelta').textContent = isFallbackEod ? 'Latest settled EOD snapshot' : 'Real-time implied underlying';
+      }
+
+      document.getElementById('lbStatusText').textContent = isFallbackEod ? 'EOD SNAPSHOT' : 'LIVE 1s';
+      document.getElementById('lbTickMeta').textContent = `#${tickCount} • ${Math.round(latencyMs)}ms`;
+
+      if (!bestPick) {
+        document.getElementById('lbPutSpec').textContent = 'No 55-135d Put';
+        document.getElementById('lbPutExpDte').textContent = 'Chain unavailable';
+        return;
+      }
+
+      const { sym, ks, expS, dteV, isMonthly, bb, aa, mm, bidSz, askSz, ivPct, delta, theta, oiV, quoteTs } = bestPick;
+      const hsVal = (Number.isFinite(aa) && Number.isFinite(bb) && aa >= bb) ? Math.max(0.0, (aa - bb) * 0.5) : 0.0;
+      const lim25 = Math.max(0.01, mm - 0.25 * hsVal);
+      const creditPct = (Number.isFinite(liveSpot) && liveSpot > 0) ? (mm / liveSpot) * 100.0 : NaN;
+      const hsPct = (Number.isFinite(liveSpot) && liveSpot > 0) ? (hsVal / liveSpot) * 100.0 : NaN;
+
+      LIVE_BUBBLE_LAST_LIMIT = roundN(lim25, 2);
+
+      document.getElementById('lbPutSpec').textContent = `SELL $${ks.toFixed(2)} PUT`;
+      document.getElementById('lbPutExpDte').textContent = `${expS} (${dteV}d • ${isMonthly ? '3rd-Fri Monthly' : 'Weekly'})`;
+      document.getElementById('lbOccSymbol').textContent = sym;
+
+      document.getElementById('lbBid').textContent = Number.isFinite(bb) ? `$${bb.toFixed(2)}` : '-';
+      document.getElementById('lbBidSize').textContent = bidSz != null ? `sz ${bidSz}` : 'EOD';
+      document.getElementById('lbAsk').textContent = Number.isFinite(aa) ? `$${aa.toFixed(2)}` : '-';
+      document.getElementById('lbAskSize').textContent = askSz != null ? `sz ${askSz}` : 'EOD';
+      document.getElementById('lbMid').textContent = Number.isFinite(mm) ? `$${mm.toFixed(2)}` : '-';
+
+      const spEl = document.getElementById('lbSpreadInfo');
+      if (Number.isFinite(hsPct)) {
+        spEl.textContent = `HS $${hsVal.toFixed(2)} (${hsPct.toFixed(2)}%)`;
+        spEl.className = `text-[10px] mono ${hsPct <= maxSpread ? 'text-emerald-400' : 'text-amber-400'}`;
+      } else {
+        spEl.textContent = `HS $${hsVal.toFixed(2)}`;
+        spEl.className = 'text-[10px] text-slate-400 mono';
+      }
+
+      document.getElementById('lbLimit25').textContent = `$${lim25.toFixed(2)}`;
+      document.getElementById('lbCreditPct').textContent = Number.isFinite(creditPct) ? `(${creditPct.toFixed(2)}% spot)` : '';
+      document.getElementById('lbLimitFormula').textContent = `Mid $${mm.toFixed(2)} − 25% × HS $${hsVal.toFixed(2)} = $${lim25.toFixed(2)}`;
+
+      const ivTxt = Number.isFinite(ivPct) ? `${ivPct.toFixed(1)}%` : '--%';
+      const delTxt = Number.isFinite(delta) ? delta.toFixed(3) : '--';
+      const thTxt = Number.isFinite(theta) ? theta.toFixed(3) : '--';
+      document.getElementById('lbGreeks').textContent = `IV ${ivTxt} • Δ ${delTxt} • Θ ${thTxt} • OI ${oiV ?? 0}`;
+
+      const nowTime = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+      }).format(new Date());
+      document.getElementById('lbQuoteTs').textContent = quoteTs ? `Quote ${String(quoteTs).slice(11, 19)} • Poll ${nowTime} ET` : `Polled ${nowTime} ET`;
+    }
+
+    async function openLiveQuoteBubble(symbol) {
+      closeLiveBubble();
+      const sid = ++LIVE_BUBBLE_SESSION_ID;
+      const ctrl = new AbortController();
+      LIVE_BUBBLE_ABORT_CTRL = ctrl;
+      LIVE_BUBBLE_LAST_SPOT = null;
+      LIVE_BUBBLE_LAST_LIMIT = null;
+
+      const rowObj = (DATA?.signals || []).find(s => s.symbol === symbol) || null;
+      document.getElementById('lbSymbol').textContent = symbol;
+      document.getElementById('lbCompany').textContent = rowObj?.company_name || symbol;
+      document.getElementById('lbSubMeta').textContent = rowObj
+        ? `Mkt Cap $${rowObj.market_cap_b.toFixed(1)}B • Earn ${rowObj.report_date} (${rowObj.release_timing}) • Day -${rowObj.trading_days_to_reaction} • 3M IVR ${rowObj.ivr90.toFixed(1)}`
+        : symbol;
+      document.getElementById('lbStatusText').textContent = 'CONNECTING...';
+      document.getElementById('lbTickMeta').textContent = '#0';
+      document.getElementById('lbSpotPrice').textContent = rowObj?.spot_price ? `$${rowObj.spot_price.toFixed(2)}` : '$--.--';
+      document.getElementById('lbSpotDelta').textContent = 'Connecting to 1s iVolatility RT stream...';
+      document.getElementById('lbPutSpec').textContent = rowObj?.opt_matched ? `SELL $${rowObj.strike} PUT` : 'Resolving 3M ATM Put...';
+      document.getElementById('lbPutExpDte').textContent = rowObj?.opt_matched ? `${rowObj.expiration_date} (${rowObj.dte}d)` : 'Scanning 55-135 DTE...';
+      document.getElementById('lbOccSymbol').textContent = rowObj?.option_symbol || '--';
+      document.getElementById('lbBid').textContent = rowObj?.bid != null ? `$${rowObj.bid.toFixed(2)}` : '$--.--';
+      document.getElementById('lbAsk').textContent = rowObj?.ask != null ? `$${rowObj.ask.toFixed(2)}` : '$--.--';
+      document.getElementById('lbMid').textContent = rowObj?.mid != null ? `$${rowObj.mid.toFixed(2)}` : '$--.--';
+      document.getElementById('lbBidSize').textContent = 'sz -';
+      document.getElementById('lbAskSize').textContent = 'sz -';
+      document.getElementById('lbSpreadInfo').textContent = 'HS -';
+      document.getElementById('lbLimit25').textContent = rowObj?.limit_25_price != null ? `$${rowObj.limit_25_price.toFixed(2)}` : '$--.--';
+      document.getElementById('lbCreditPct').textContent = '';
+      document.getElementById('lbLimitFormula').textContent = 'Mid − 25% of Half-Spread';
+      document.getElementById('lbGreeks').textContent = 'IV --% • Δ -- • Θ -- • OI --';
+      document.getElementById('lbQuoteTs').textContent = '--';
+      const errBox = document.getElementById('lbErrorBox');
+      errBox.classList.add('hidden');
+      errBox.textContent = '';
+
+      document.getElementById('liveQuoteBubbleWrap').classList.remove('hidden');
+
+      try {
+        const { authQuery } = await resolveIvolAuthSession();
+        if (sid !== LIVE_BUBBLE_SESSION_ID) return;
+
+        const nyStr = new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit'
+        }).format(new Date());
+        const todayDt = parseDateUTC(nyStr);
+
+        const fullPool = await discoverCandidatePutPool(symbol, rowObj, authQuery, todayDt, ctrl.signal);
+        if (sid !== LIVE_BUBBLE_SESSION_ID) return;
+        if (!fullPool.length) {
+          throw new Error(`No 55–135 DTE Put contracts found for ${symbol}.`);
+        }
+
+        let anchorSpot = Number(rowObj?.spot_price || fullPool[0]?.underlying_price || fullPool[0]?.price_strike || 100);
+        let initialRanked = rankPutPoolForSpot(fullPool, anchorSpot, todayDt);
+        if (!initialRanked.length) {
+          throw new Error(`No eligible 55–135 DTE Put expirations found for ${symbol}.`);
+        }
+
+        // Initial probe across top 14 candidates to lock onto true live spot price
+        let pollSymbols = initialRanked.slice(0, 14).map(x => x.sym);
+        let tickCount = 0;
+
+        while (sid === LIVE_BUBBLE_SESSION_ID) {
+          const tickT0 = performance.now();
+          tickCount++;
+
+          const rtUrl = `https://restapi.ivolatility.com/equities/rt/options-rawiv?symbols=${encodeURIComponent(pollSymbols.join(','))}&${authQuery}&_t=${Date.now()}`;
+          const rr = await fetch(rtUrl, { cache: 'no-store', signal: ctrl.signal });
+          if (sid !== LIVE_BUBBLE_SESSION_ID) return;
+
+          const latencyMs = performance.now() - tickT0;
+
+          if (rr.status === 400 || rr.status === 401 || rr.status === 403) {
+            let msg = `HTTP ${rr.status}`;
+            try { const j = await rr.json(); msg = j.message || msg; } catch (_) {}
+            if (String(msg).includes('Limit is not found')) {
+              throw new Error('Current iVolatility account exhausted its RT/API quota ("Limit is not found"). Click "iVolatility" in top bar to switch accounts.');
+            }
+            throw new Error(`iVolatility RT quote error: ${msg}`);
+          }
+
+          let rtList = [];
+          if (rr.ok && rr.status !== 204) {
+            const rj = await rr.json();
+            rtList = Array.isArray(rj) ? rj : (rj.data || []);
+          }
+
+          if (rtList.length > 0) {
+            const spotSamples = rtList
+              .map(d => Number(d.impliedUnderlyingPrice || d.forwardPrice))
+              .filter(v => Number.isFinite(v) && v > 0);
+            const liveSpot = spotSamples.length > 0 ? spotSamples[0] : anchorSpot;
+
+            // Narrow or re-center 7-contract poll window around liveSpot (re-query immediately if spot shifted >1.5%)
+            const spotMovedSignificantly = Math.abs(liveSpot - anchorSpot) / Math.max(anchorSpot, 1) > 0.015;
+            if (tickCount === 1 || spotMovedSignificantly) {
+              anchorSpot = liveSpot;
+              const reRanked = rankPutPoolForSpot(fullPool, liveSpot, todayDt);
+              if (reRanked.length > 0) {
+                pollSymbols = reRanked.slice(0, 7).map(x => x.sym);
+                if (spotMovedSignificantly) {
+                  const rr2 = await fetch(`https://restapi.ivolatility.com/equities/rt/options-rawiv?symbols=${encodeURIComponent(pollSymbols.join(','))}&${authQuery}&_t=${Date.now()}`, { cache: 'no-store', signal: ctrl.signal });
+                  if (rr2.ok && rr2.status !== 204) {
+                    const rj2 = await rr2.json();
+                    const list2 = Array.isArray(rj2) ? rj2 : (rj2.data || []);
+                    if (list2.length > 0) rtList = list2;
+                  }
+                }
+              }
+            }
+
+            // Pick exact strategy-optimal 3M ATM Put on this live tick
+            const liveCandidates = [];
+            for (const d of rtList) {
+              const expS = String(d.expirationDate || '').slice(0, 10);
+              if (!/^\d{4}-\d{2}-\d{2}$/.test(expS)) continue;
+              const dExp = parseDateUTC(expS);
+              const dteV = Math.round((dExp.getTime() - todayDt.getTime()) / 86400000);
+              if (dteV < 55 || dteV > 135) continue;
+              const ks = Number(d.strike);
+              if (!Number.isFinite(ks) || ks <= 0) continue;
+              const relM = Math.abs(ks - liveSpot) / liveSpot;
+              const [bb, aa, mm, ok] = cleanOptionQuote(d.bidPrice, d.askPrice, d.theoPrice);
+              if (!ok || !Number.isFinite(mm) || mm <= 0) continue;
+              const tf = thirdFridayUTC(dExp.getUTCFullYear(), dExp.getUTCMonth() + 1);
+              const isMonthly = Math.abs((dExp.getTime() - tf.getTime()) / 86400000) <= 1;
+              const monthlyPen = isMonthly ? 0.0 : 0.005;
+              const oiV = Math.trunc(Number(d.openInterest || 0) || 0);
+              const score = relM + 0.0015 * Math.abs(dteV - 90) + monthlyPen;
+              const ivRaw = Number(d.iv);
+              const ivPct = (Number.isFinite(ivRaw) && ivRaw > 0) ? (ivRaw < 3.0 ? ivRaw * 100.0 : ivRaw) : NaN;
+              liveCandidates.push({
+                score,
+                within12: relM <= 0.12 ? 0 : 1,
+                negOi: -oiV,
+                sym: String(d.symbol || '').trim(),
+                ks, expS, dteV, isMonthly,
+                bb, aa, mm,
+                bidSz: d.bidSize != null ? Math.trunc(Number(d.bidSize)) : null,
+                askSz: d.askSize != null ? Math.trunc(Number(d.askSize)) : null,
+                ivPct,
+                delta: Number.isFinite(Number(d.delta)) ? Number(d.delta) : NaN,
+                theta: Number.isFinite(Number(d.theta)) ? Number(d.theta) : NaN,
+                oiV,
+                quoteTs: d.quoteTimestamp || d.timestamp || ''
+              });
+            }
+
+            liveCandidates.sort((a, b) => (a.within12 - b.within12) || (a.score - b.score) || (a.negOi - b.negOi));
+            renderBubbleTick(rowObj, liveCandidates[0] || null, liveSpot, tickCount, latencyMs, false);
+          } else {
+            // EOD fallback if RT stream has 0 records for an illiquid symbol
+            const fb = initialRanked[0];
+            const [bb, aa, mm] = cleanOptionQuote(fb.raw.Bid, fb.raw.Ask, fb.raw.price);
+            const ivRaw = Number(fb.raw.iv);
+            renderBubbleTick(rowObj, {
+              sym: fb.sym, ks: fb.ks, expS: fb.expS, dteV: fb.dteV, isMonthly: fb.isMonthly,
+              bb, aa, mm, bidSz: null, askSz: null,
+              ivPct: (Number.isFinite(ivRaw) && ivRaw > 0) ? (ivRaw < 3.0 ? ivRaw * 100.0 : ivRaw) : NaN,
+              delta: Number(fb.raw.delta), theta: Number(fb.raw.theta), oiV: fb.oiV, quoteTs: ''
+            }, anchorSpot, tickCount, latencyMs, true);
+          }
+
+          const waitMs = Math.max(150, 1000 - (performance.now() - tickT0));
+          await new Promise(resolve => {
+            LIVE_BUBBLE_TIMER = setTimeout(resolve, waitMs);
+          });
+        }
+      } catch (err) {
+        if (err?.name === 'AbortError' || sid !== LIVE_BUBBLE_SESSION_ID) return;
+        document.getElementById('lbStatusText').textContent = 'PAUSED';
+        errBox.classList.remove('hidden');
+        errBox.textContent = err.message || String(err);
+      }
     }
 
     refreshCredButtonBadge();
