@@ -362,6 +362,10 @@
     }
 
     async function loadCredentials() {
+      if (await checkPythonBackend()) {
+        const r = await fetch('/api/credentials', { cache: 'no-store' });
+        if (r.ok) return normalizeCreds(await r.json());
+      }
       const localOverride = localStorage.getItem('ivol_credentials_override');
       if (localOverride) {
         try { return normalizeCreds(JSON.parse(localOverride)); } catch (_) {}
@@ -1380,8 +1384,9 @@
       try {
         if (await checkPythonBackend()) {
           const resp = await fetch('/api/refresh', { method: 'POST' });
-          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-          DATA = await resp.json();
+          const body = await resp.json().catch(() => ({}));
+          if (!resp.ok) throw new Error(body.error || `HTTP ${resp.status}`);
+          DATA = body;
         } else {
           DATA = await runBrowserLiveScan(msg => { tx.textContent = msg; });
         }

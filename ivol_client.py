@@ -24,7 +24,8 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 ROOT_DIR = Path(__file__).resolve().parent
-CREDENTIALS_FILE = ROOT_DIR / "ivol_credentials.json"
+PROJECT_ROOT = ROOT_DIR.parent if ROOT_DIR.name == "app_files" else ROOT_DIR
+CREDENTIALS_FILE = PROJECT_ROOT / "ivol_credentials.json"
 CACHE_DIR = Path(os.environ.get("IVOL_CACHE_DIR", str(ROOT_DIR / "cache")))
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
