@@ -58,8 +58,9 @@ class IVolClient:
     """Self-contained wrapper around iVolatility SDK with local disk cache & CSV repair."""
 
     _rate_lock = threading.Lock()
+    _inflight_sem = threading.BoundedSemaphore(2)
     _last_req_ts: float = 0.0
-    _min_req_interval: float = 0.80
+    _min_req_interval: float = 0.65
 
     def __init__(
         self,
@@ -306,8 +307,9 @@ class IVolClient:
     def _call_with_retry(cls, fn: Any, **kwargs: Any) -> pd.DataFrame:
         for attempt in range(1, 7):
             try:
-                cls._throttle()
-                res = fn(**kwargs)
+                with cls._inflight_sem:
+                    cls._throttle()
+                    res = fn(**kwargs)
                 return res if isinstance(res, pd.DataFrame) else pd.DataFrame()
             except requests.HTTPError as exc:
                 sc = exc.response.status_code if exc.response is not None else 0

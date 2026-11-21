@@ -15,26 +15,26 @@ show_hi20_line    = input.bool(true, "Plot 20-Day VIX Rolling High", group="Disp
 // 2. TRUE DAILY MACRO SERIES (Timeframe-Independent: Works on 5m, 1h, 1D, etc.)
 // ============================================================================
 f_vix_daily() =>
-    float c     = close
-    float sma_f = ta.sma(close, sma_fast_len)
-    float sma_s = ta.sma(close, sma_slow_len)
-    float hi_n  = ta.highest(close, spike_lookback)
+    // Use strictly completed prior session (`close[1]`) for causal Day -20 4:00 PM ET option entry alignment
+    float c_prior = nz(close[1], close)
+    float sma_f = ta.sma(c_prior, sma_fast_len)
+    float sma_s = ta.sma(c_prior, sma_slow_len)
+    float hi_n  = ta.highest(c_prior, spike_lookback)
 
-    // Exact VIX close today required to flip 10D SMA < 30D SMA
+    // Exact VIX close today required to flip next session's prior-day 10D SMA < 30D SMA
     float sum_f_prev = math.sum(close[1], sma_fast_len - 1)
     float sum_s_prev = math.sum(close[1], sma_slow_len - 1)
     float ratio      = float(sma_slow_len) / float(sma_fast_len)
     float denom      = ratio - 1.0
     float req_vix    = denom > 0 ? (sum_s_prev - ratio * sum_f_prev) / denom : na
 
-    // Trading days remaining in 20D spike window once VIX <= threshold
     int youngest_spike = -1
     for k = 0 to spike_lookback - 1
-        if close[k] > vix_spike_thresh
+        if c_prior[k] > vix_spike_thresh
             youngest_spike := k
             break
     int days_to_calm = youngest_spike >= 0 ? (spike_lookback - youngest_spike) : 0
-    [c, sma_f, sma_s, hi_n, req_vix, days_to_calm]
+    [c_prior, sma_f, sma_s, hi_n, req_vix, days_to_calm]
 
 f_vix3m_daily() =>
     float c3  = close
@@ -100,11 +100,11 @@ alertcondition(cb_just_engaged, title="3. Circuit Breaker ENGAGED — Pause API 
 var table hud = table.new(position.top_right, 2, 8, border_width=1, border_color=color.new(#334155, 30))
 
 if barstate.islast and show_table
-    string gate_txt = is_circuit_breaker ? "HOLD — CIRCUIT BREAKER ACTIVE (SAVE API)" : is_post_stress ? "GO — PING API NOW (DUAL-SLEEVE UNLOCKED)" : "GO — SAFE TO PING API (CALM CORE SLEEVE)"
+    string gate_txt = is_circuit_breaker ? "HIGH-IVR LOCKED — CORE <25 ONLY" : is_post_stress ? "THAW UNLOCKED — CORE <25 (+ >=50 IN DUAL)" : "CALM HARVEST — CORE <25 OPTIMAL"
     color  gate_bg  = is_circuit_breaker ? color.new(#dc2626, 10) : is_post_stress ? color.new(#d97706, 10) : color.new(#0d9488, 15)
 
     string reg_txt  = is_circuit_breaker ? "PANIC CIRCUIT-BREAKER (20D Hi > 24 & 10D >= 30D)" : is_post_stress ? "POST-STRESS THAW (20D Hi > 24 & 10D < 30D)" : "CALM MARKET HARVEST (20D VIX Hi <= 24.0)"
-    string ivr_txt  = is_circuit_breaker ? "High-IVR (>=50) BLOCKED • Park Idle in 3M T-Bills" : is_post_stress ? "Pull Co. IVR90 < 25 (Core) AND >= 50 (Mean-Rev)" : "Pull Co. IVR90 < 25 Only (Skip 25–100)"
+    string ivr_txt  = is_circuit_breaker ? "Core IVR90 < 25 Eligible • High-IVR (>=50) LOCKED" : is_post_stress ? "Default: Core IVR90 < 25 Only (Dual adds >=50)" : "Strict Core IVR90 < 25 Only (<=0.35% Half-Spread)"
     color  ivr_col  = is_circuit_breaker ? #fca5a5 : is_post_stress ? #fde68a : #5eead4
 
     float  sma_diff = vix_sma10 - vix_sma30

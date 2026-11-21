@@ -1,14 +1,13 @@
-# Pre-Earnings Short 3-Month Put — Online Portfolio Signal Screener
+# Pre-Earnings Short 3-Month Put — Online Portfolio Signal Screener (Post-Audit Edition)
 
 Live Online App: **https://michaeljoudan.github.io/pre-earnings-put-screener/**
 
-Turnkey online edition of the **10-Year Verified Pre-Earnings Short 3-Month Put Portfolio Signal Screener** (`+10.24% CAGR | 0.88 Sharpe | -11.11% MaxDD`), preserving 100% of the exact screening logic, credentials, and workflow out of the box with zero extra setup.
+Peer-review-audited online & local edition of the **10-Year Pre-Earnings Short 3-Month Put Fixed-Slot Buy-and-Hold Screener** across US primary common stocks `> $10B` market cap & `>= 10,000` option Open Interest (`18,814` strictly causal trades, `2016–2026`):
+- **Default Loaded Strategy — Strict Core Low-IVR `< 25` Fixed-Slot Buy-and-Hold (`10` Slots @ `10%`, `<= 0.35%` Half-Spread):** **`+7.72%` Blind Out-of-Sample Net CAGR** (`+3.65%` standalone excess over T-Bills, **`0.55` OOS Net Sharpe**, **`-7.23%` OOS MaxDD**) | **`+6.24%` Full 10-Year Net CAGR** (`0.54` Net Sharpe, `-13.37%` MaxDD) after `25%` bid-ask spread concessions and `$0.65`/contract/leg commissions.
+- **Alternative Selectable Mode — Diversified `25`-Slot (`4%`) Dual-Sleeve Calendar (`Core < 25` + `Post-Stress Thaw >= 50`):** **`+6.18%` Blind Out-of-Sample Net CAGR** (`0.37` Net Sharpe, `-8.26%` OOS MaxDD) | **`+5.41%` Full 10-Year Net CAGR** (`0.48` Net Sharpe, `-10.40%` MaxDD).
 
-## How It Works Online (Zero Configuration Required)
-1. **Instant Live Dashboard (`index.html`):**
-   - Loads pre-configured credentials directly from `ivol_credentials.json` (and allows live in-browser edits via **iVolatility API Keys**).
-   - Clicking **Run Fresh Live Scan** queries `restapi.ivolatility.com` directly from your browser (`ALL_USA` stock universe + 55–135 DTE ATM Put chains) using the exact same `scanner_engine.py` rules, updating signals and **Export CSV** on the spot.
-2. **Automated Background Refresh (`.github/workflows/live_scan.yml`):**
-   - Runs `scripts/run_scan.py` automatically 4× every US trading day (Open, Mid-Day, Pre-Close, Post-Close EOD) using `ivol_credentials.json` in the repo — keeping `output/latest_signals.json`, `output/latest_signals.csv`, and `output/nasdaq_earnings_window.json` continuously updated.
-3. **Enable GitHub Pages (1 Click if not already active):**
-   - In **[Settings → Pages](https://github.com/MichaelJoudan/pre-earnings-put-screener/settings/pages)**, set **Source** to **Deploy from a branch** → Branch **`main` / `/ (root)`** (or **GitHub Actions** — both are fully supported).
+## Key Features & Post-Audit Safeguards
+1. **Default Optimal Strategy on Load (`Strict Low-IVR < 25 Only`):** Loads directly into the highest-Sharpe, lowest-drawdown 10-slot Fixed Buy-and-Hold specification while allowing instant one-click comparison against Dual-Sleeve (`25`-slot), Post-Stress Thaw Preview, High-IVR `>= 50`, and Unfiltered baselines.
+2. **Strictly Causal Execution & Data Guards:** Prior-session (`Day -21`) CBOE VIX gating (eliminating `4:15 PM` VIX vs. `4:00 PM` option close leakage), uniform `>= 10,000` underlying option Open Interest floor, Nasdaq-vs-iVolatility ADR share-ratio cross-check, `60–135` DTE corrupt-quote filter, strict `<= 0.35%` entry half-spread rejection (`0%` rejected weight), and live 10-slot capacity tracking.
+3. **1-Second Live Stock & Strategy Put Quote Bubble + Multi-Account Switcher:** Click any ticker (Columns 1–4) for a live 1s streaming option order ticket (`Mid - 25% Half-Spread`), and switch iVolatility API Key or Username/Password accounts anytime with shared IndexedDB EOD caching.
+4. **Zero-Quota Scheduled Calendar Refresh (`.github/workflows/live_scan.yml`):** Automated daily refresh of upcoming Nasdaq earnings and causal VIX macro regime using `0` iVolatility API calls, preserving `100%` of API quota for on-demand scans.

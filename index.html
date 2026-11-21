@@ -16,19 +16,19 @@
     <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-slate-800 pb-5">
       <div>
         <div class="flex items-center gap-2.5 flex-wrap">
-          <span class="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">10Y Verified Strategy</span>
+          <span class="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">10Y Peer-Review Audited &bull; Fixed-Slot Buy &amp; Hold</span>
           <span id="asOfBadge" class="text-xs text-slate-400 mono">Loading...</span>
         </div>
         <h1 class="text-2xl font-bold tracking-tight text-white mt-1">Pre-Earnings Short 3-Month Put — Portfolio Signal Screener</h1>
-        <p class="text-sm text-slate-400 mt-0.5">US Common Equities &gt; $10B Market Cap &bull; Enter 20 Trading Days Before Earnings &bull; Exit 1 Trading Day Before Earnings</p>
+        <p class="text-sm text-slate-400 mt-0.5">US Common Equities &gt; $10B Market Cap &bull; &ge; 10,000 Option OI &bull; Enter Day -20 &bull; Hold Untouched to Day -1</p>
       </div>
       <div class="flex flex-wrap items-center gap-2.5">
         <select id="modeSelect" onchange="renderAll()" class="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500">
-          <option value="dual">Strategy Mode: Live Dual-Sleeve Calendar (+10.24% CAGR | 0.88 Sharpe)</option>
-          <option value="thaw_preview">Preview Mode: Post-Stress Thaw (Once 10D VIX &lt; 30D VIX)</option>
-          <option value="low_only">Strategy Mode: Strict Low-IVR &lt; 25 Only (+9.37% CAGR | 0.83 Sharpe)</option>
-          <option value="high_only">Strategy Mode: Single-Trade High-IVR &gt;= 50 (+1.12%/Trade)</option>
-          <option value="unfiltered">Strategy Mode: Unfiltered &gt; $10B Baseline (+7.66% CAGR)</option>
+          <option value="low_only" selected>Optimal Strategy (Default): Strict Low-IVR &lt; 25 Only (+7.72% OOS / +6.24% 10Y Net | 0.55 Sharpe)</option>
+          <option value="dual">Strategy Mode (25-Slot): Dual-Sleeve Calendar (+6.18% OOS / +5.41% 10Y Net | 0.48 Sharpe)</option>
+          <option value="thaw_preview">Preview Mode: Post-Stress Thaw Unlocked (Core &lt; 25 + Thaw &gt;= 50)</option>
+          <option value="high_only">Single-Trade Mode: Starting 3M IV Rank &gt;= 50 (+0.75% Net/Trade)</option>
+          <option value="unfiltered">Baseline Mode: Unfiltered &gt; $10B (+3.64% Entry/Exit | -1.06% Resized OOS)</option>
         </select>
         <button onclick="openPineModal()" class="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 transition">Pine v6 Companion</button>
         <button id="credBtn" onclick="openCredModal()" class="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 transition flex items-center gap-1.5">
@@ -289,7 +289,10 @@
 
     const SECONDARY_SHARE_CLASSES = new Set([
       "GOOG", "BRK/A", "BRK.A", "FOX", "PBR/A", "PBR.A",
-      "BBL", "RDS/B", "RDS.B", "NWS", "UA", "Z", "HEI/A"
+      "BBL", "RDS/B", "RDS.B", "NWS", "UA", "Z",
+      "HEI/A", "HEI.A", "LEN/B", "LEN.B", "BF/A", "BF.A",
+      "UHAL/B", "UHAL.B", "CWEN/A", "CWEN.A", "BIO/B", "BIO.B",
+      "TAP/A", "TAP.A", "MOG/A", "MOG.A", "WSO/B", "WSO.B"
     ]);
 
     const sleep = ms => new Promise(res => setTimeout(res, ms));
@@ -1013,7 +1016,7 @@
       return parsedMap;
     }
 
-    async function fetchBest90dAtmPutBrowser(symbol, quoteDate, fallbackSpot, authQuery, acctTag) {
+    async function fetchBest90dAtmPutBrowser(symbol, quoteDate, fallbackSpot, authQuery, acctTag, ivx90Ref = 35.0) {
       const emptyRes = {
         opt_matched: false, option_symbol: "", expiration_date: "", dte: null,
         strike: null, bid: null, ask: null, mid: null, limit_25_price: null,
@@ -1062,11 +1065,14 @@
         const spot = (Number.isFinite(up) && up > 0) ? up : fallbackSpot;
         const ks = Number(r.price_strike);
         const dteV = Math.trunc(Number(r.dte));
-        if (!Number.isFinite(spot) || spot <= 0 || !Number.isFinite(ks) || ks <= 0 || dteV < 55 || dteV > 135) continue;
+        if (!Number.isFinite(spot) || spot <= 0 || !Number.isFinite(ks) || ks <= 0 || dteV < 60 || dteV > 135) continue;
         const relM = Math.abs(ks - spot) / spot;
         if (relM > 0.12) continue;
         const [bb, aa, mm, ok] = cleanOptionQuote(r.Bid, r.Ask, r.price);
         if (!ok || !Number.isFinite(mm) || mm <= 0) continue;
+        const ivRawChk = Number(r.iv);
+        const ivPctChk = (Number.isFinite(ivRawChk) && ivRawChk > 0) ? (ivRawChk < 3.0 ? ivRawChk * 100.0 : ivRawChk) : NaN;
+        if ((mm / spot) > 0.25 && Number.isFinite(ivPctChk) && ivPctChk > 3.0 * Math.max(Number(ivx90Ref) || 35.0, 15.0)) continue;
         const expS = String(r.expiration_date || '').slice(0, 10);
         let monthlyPen = 0.005;
         if (/^\d{4}-\d{2}-\d{2}$/.test(expS)) {
@@ -1160,6 +1166,7 @@
       const seenSyms = new Set();
       const candidates = [];
       const minMcUsd = 10.0 * 1e9;
+      const minTotalOptOi = 10000;
       const coreIvrMax = 25.0;
       const reversionIvrMin = 50.0;
       const maxHalfSpreadPct = 0.35;
@@ -1178,8 +1185,12 @@
         const nasdaqMc = parseNasdaqMcap(er.marketCap);
         const ivolMc = Number(smdRow.marketCap || 0) || 0;
         let bestMc = (ivolMc >= 1e8 && Number.isFinite(ivolMc)) ? ivolMc : nasdaqMc;
+        if (nasdaqMc >= 1e8 && ivolMc > 3.0 * nasdaqMc) bestMc = nasdaqMc;
         if (nasdaqMc >= 1e9 && ivolMc <= 0) bestMc = nasdaqMc;
         if (bestMc < minMcUsd) continue;
+
+        const totalOptOi = Math.trunc(Number(smdRow.openInterest || 0) || 0);
+        if (totalOptOi < minTotalOptOi) continue;
 
         const ivx90 = Number(smdRow.ivx90);
         const ivr90 = Number(smdRow.ivr90);
@@ -1220,10 +1231,10 @@
         let windowBucket = 'ACTIVE_COHORT';
         if (tdToReaction === 0) windowBucket = 'REACTING_TODAY';
         else if (tdToReaction === 1 || tdToReaction === 2) windowBucket = 'EXIT_ALERT';
-        else if (tdToReaction >= 18 && tdToReaction <= 22) windowBucket = 'ENTRY_WINDOW';
-        else if (tdToReaction >= 23 && tdToReaction <= 27) windowBucket = 'WATCHLIST_UPCOMING';
+        else if (tdToReaction >= 19 && tdToReaction <= 21) windowBucket = 'ENTRY_WINDOW';
+        else if (tdToReaction >= 22 && tdToReaction <= 27) windowBucket = 'WATCHLIST_UPCOMING';
 
-        const norm90 = Number(normIvr90Map[ivolSym] ?? 27.3);
+        const norm90 = Number(normIvr90Map[ivolSym] ?? 27.5);
         const excessNorm90 = ivr90 - norm90;
 
         candidates.push({
@@ -1249,17 +1260,21 @@
           ivp90: Number.isFinite(ivp90) ? roundN(ivp90, 1) : null,
           norm_ivr90_baseline: roundN(norm90, 1),
           ivr90_excess_vs_norm: roundN(excessNorm90, 1),
-          total_opt_oi: Math.trunc(Number(smdRow.openInterest || 0) || 0),
+          total_opt_oi: totalOptOi,
           eps_forecast: String(er.epsForecast || '').trim()
         });
       }
 
-      const activeCohort = candidates.filter(c => c.window_bucket === 'ACTIVE_COHORT');
+      const selectedMode = (document.getElementById('modeSelect')?.value) || 'low_only';
+      const activeCohort = candidates.filter(c => c.trading_days_to_reaction >= 2 && c.trading_days_to_reaction <= 19);
       const estActiveCore = activeCohort.filter(c => c.ivr90 < (coreIvrMax + 3.0));
-      const nCoreActive = estActiveCore.length;
-      const coreAllocPct = Math.min(100.0, nCoreActive * 10.0);
+      const estActiveThaw = macro.recent_thaw_18d ? activeCohort.filter(c => c.ivr90 >= (reversionIvrMin - 5.0)) : [];
+      const nCoreActive = Math.min(10, estActiveCore.length);
+      const nThawActive = Math.min(Math.max(0, 10 - nCoreActive), estActiveThaw.length);
+      const nActiveUsed = selectedMode === 'low_only' ? nCoreActive : Math.min(10, nCoreActive + nThawActive);
+      const coreAllocPct = Math.min(100.0, nActiveUsed * 10.0);
       const idleCapacityPct = Math.max(0.0, 100.0 - coreAllocPct);
-      const idleSlotsCount = Math.max(0, 10 - nCoreActive);
+      const idleSlotsCount = Math.max(0, 10 - nActiveUsed);
 
       const chainTargets = candidates.filter(c => ['ENTRY_WINDOW', 'WATCHLIST_UPCOMING', 'EXIT_ALERT'].includes(c.window_bucket));
       const optResults = {};
@@ -1267,7 +1282,7 @@
         const c = chainTargets[idx];
         onProgress(`Pricing 90D Put Chains (${idx + 1}/${chainTargets.length}: ${c.symbol})...`);
         try {
-          optResults[c.symbol] = await fetchBest90dAtmPutBrowser(c.symbol, smdDate, c.spot_price, authQuery, acctTag);
+          optResults[c.symbol] = await fetchBest90dAtmPutBrowser(c.symbol, smdDate, c.spot_price, authQuery, acctTag, c.ivx90_pct || 35.0);
         } catch (chainErr) {
           const em = String(chainErr.message || '');
           if (em.includes('auth error') || em.includes('QUOTA_EXHAUSTED')) throw chainErr;
@@ -1279,11 +1294,34 @@
 
       for (const c of candidates) {
         Object.assign(c, optResults[c.symbol] || { opt_matched: false });
+      }
+
+      candidates.sort((a, b) => {
+        const wbA = a.window_bucket === 'ENTRY_WINDOW' ? 0 : 1;
+        const wbB = b.window_bucket === 'ENTRY_WINDOW' ? 0 : 1;
+        if (wbA !== wbB) return wbA - wbB;
+        const exA = a.trading_days_to_reaction === 20 ? 0 : 1;
+        const exB = b.trading_days_to_reaction === 20 ? 0 : 1;
+        if (exA !== exB) return exA - exB;
+        const slA = a.ivr90 < coreIvrMax ? 0 : (a.ivr90 >= reversionIvrMin ? 1 : 2);
+        const slB = b.ivr90 < coreIvrMax ? 0 : (b.ivr90 >= reversionIvrMin ? 1 : 2);
+        if (slA !== slB) return slA - slB;
+        const hsA = a.half_spread_pct != null ? a.half_spread_pct : 99.0;
+        const hsB = b.half_spread_pct != null ? b.half_spread_pct : 99.0;
+        if (hsA !== hsB) return hsA - hsB;
+        return b.market_cap_b - a.market_cap_b;
+      });
+
+      let remainingIdleSlots = idleSlotsCount;
+      const allowThaw = (selectedMode === 'dual') && Boolean(macro.post_stress_high_ivr_enabled);
+
+      for (const c of candidates) {
         const wb = c.window_bucket;
         const ivr = c.ivr90;
         const tdR = c.trading_days_to_reaction;
         const hs = c.half_spread_pct;
-        const spreadOk = (hs === null || hs === undefined) || (hs <= maxHalfSpreadPct);
+        const spreadOk = (hs !== null && hs !== undefined) && (hs <= maxHalfSpreadPct);
+        const dayTag = tdR === 20 ? 'Day -20' : `Day -${tdR} Buf`;
 
         if (wb === 'REACTING_TODAY') {
           c.signal_code = 'FLAT_EARNINGS_REACTION';
@@ -1297,33 +1335,50 @@
           c.recommended_weight_pct = 0.0;
         } else if (wb === 'ENTRY_WINDOW') {
           if (ivr < coreIvrMax) {
-            if (spreadOk && c.opt_matched) {
+            if (remainingIdleSlots <= 0) {
+              c.signal_code = 'BLOCKED_CAPACITY_FULL';
+              c.signal_label = 'BLOCKED — All 10 Portfolio Slots Occupied';
+              c.signal_tier = 'FILTERED_OUT';
+              c.recommended_weight_pct = 0.0;
+            } else if (spreadOk && c.opt_matched) {
               c.signal_code = 'ENTER_CORE_SLEEVE';
-              c.signal_label = 'SELL 3M ATM PUT — Core Low-IVR Sleeve';
+              c.signal_label = `SELL 3M ATM PUT — Core Low-IVR < 25 (${dayTag})`;
               c.signal_tier = 'ACTIONABLE_ENTRY';
               c.recommended_weight_pct = 10.0;
+              if (tdR === 20) remainingIdleSlots = Math.max(0, remainingIdleSlots - 1);
             } else {
-              c.signal_code = 'LIMIT_ONLY_WIDE_SPREAD';
-              c.signal_label = 'LIMIT ORDER ONLY — Wide Option Spread';
+              c.signal_code = 'REJECTED_WIDE_SPREAD';
+              c.signal_label = `REJECTED — Spread > ${maxHalfSpreadPct.toFixed(2)}% Cap (Core < 25)`;
               c.signal_tier = 'CAUTION_ENTRY';
-              c.recommended_weight_pct = 5.0;
+              c.recommended_weight_pct = 0.0;
             }
           } else if (ivr >= reversionIvrMin) {
-            if (macro.post_stress_high_ivr_enabled && idleCapacityPct > 0) {
-              if (hs !== null && hs !== undefined && hs <= (maxHalfSpreadPct + 0.05) && c.opt_matched) {
+            if (selectedMode === 'low_only') {
+              c.signal_code = 'SKIP_STRICT_LOW_IVR_MODE';
+              c.signal_label = 'SKIP — Strict Low-IVR (< 25) Mandate Active';
+              c.signal_tier = 'FILTERED_OUT';
+              c.recommended_weight_pct = 0.0;
+            } else if (allowThaw && remainingIdleSlots > 0) {
+              if (spreadOk && c.opt_matched) {
                 c.signal_code = 'ENTER_POST_STRESS_SLEEVE';
-                c.signal_label = 'SELL 3M ATM PUT — Post-Stress Mean-Reversion';
+                c.signal_label = `SELL 3M ATM PUT — Post-Stress Thaw >= 50 (${dayTag})`;
                 c.signal_tier = 'ACTIONABLE_ENTRY';
-                c.recommended_weight_pct = Math.min(10.0, idleCapacityPct);
+                c.recommended_weight_pct = 10.0;
+                if (tdR === 20) remainingIdleSlots = Math.max(0, remainingIdleSlots - 1);
               } else {
-                c.signal_code = 'LIMIT_ONLY_WIDE_SPREAD';
-                c.signal_label = 'LIMIT ORDER ONLY — Post-Stress Wide Spread';
+                c.signal_code = 'REJECTED_WIDE_SPREAD';
+                c.signal_label = `REJECTED — Spread > ${maxHalfSpreadPct.toFixed(2)}% Cap (Thaw >= 50)`;
                 c.signal_tier = 'CAUTION_ENTRY';
-                c.recommended_weight_pct = 5.0;
+                c.recommended_weight_pct = 0.0;
               }
+            } else if (allowThaw && remainingIdleSlots <= 0) {
+              c.signal_code = 'BLOCKED_CAPACITY_FULL';
+              c.signal_label = 'BLOCKED — All 10 Portfolio Slots Occupied';
+              c.signal_tier = 'FILTERED_OUT';
+              c.recommended_weight_pct = 0.0;
             } else {
               c.signal_code = 'BLOCKED_HIGH_IVR';
-              c.signal_label = 'BLOCKED — Circuit-Breaker Active (IVR >= 50)';
+              c.signal_label = 'BLOCKED — VIX Thaw Gate Locked (IVR >= 50)';
               c.signal_tier = 'FILTERED_OUT';
               c.recommended_weight_pct = 0.0;
             }
@@ -1342,12 +1397,19 @@
           c.signal_code = 'ACTIVE_HOLD';
           c.signal_label = `IN HOLDING WINDOW (Exit ${c.scheduled_exit_date})`;
           c.signal_tier = 'COHORT';
-          c.recommended_weight_pct = ivr < (coreIvrMax + 3.0) ? 10.0 : 0.0;
+          const isHeld = (ivr < (coreIvrMax + 3.0)) || (selectedMode === 'dual' && Boolean(macro.recent_thaw_18d) && ivr >= (reversionIvrMin - 5.0));
+          c.recommended_weight_pct = isHeld ? 10.0 : 0.0;
         }
       }
 
       const tierRank = { ACTIONABLE_ENTRY: 0, CAUTION_ENTRY: 1, EXIT: 2, WATCHLIST: 3, FILTERED_OUT: 4, COHORT: 5 };
-      candidates.sort((a, b) => ((tierRank[a.signal_tier] ?? 9) - (tierRank[b.signal_tier] ?? 9)) || (a.trading_days_to_reaction - b.trading_days_to_reaction) || (b.market_cap_b - a.market_cap_b));
+      candidates.sort((a, b) => {
+        const tDiff = (tierRank[a.signal_tier] ?? 9) - (tierRank[b.signal_tier] ?? 9);
+        if (tDiff !== 0) return tDiff;
+        const dKeyA = a.window_bucket === 'ENTRY_WINDOW' ? Math.abs(a.trading_days_to_reaction - 20) : a.trading_days_to_reaction;
+        const dKeyB = b.window_bucket === 'ENTRY_WINDOW' ? Math.abs(b.trading_days_to_reaction - 20) : b.trading_days_to_reaction;
+        return (dKeyA - dKeyB) || (b.market_cap_b - a.market_cap_b);
+      });
 
       const nowFmt = new Intl.DateTimeFormat('sv-SE', {
         timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
@@ -1357,13 +1419,17 @@
       return {
         generated_at: nowFmt,
         scan_elapsed_sec: roundN((performance.now() - t0) / 1000, 2),
+        default_strategy_mode: selectedMode,
         macro_regime: macro,
         portfolio_capacity: {
           active_cohort_total_gt10b: activeCohort.length,
           estimated_active_core_positions: nCoreActive,
+          estimated_active_thaw_positions: nThawActive,
+          estimated_total_active_positions: nActiveUsed,
           estimated_core_allocation_pct: roundN(coreAllocPct, 1),
           available_idle_capacity_pct: roundN(idleCapacityPct, 1),
           available_idle_slots: idleSlotsCount,
+          remaining_idle_slots_after_today: remainingIdleSlots,
           cash_collateral_tbill_yield_pct: macro.tbill_3m_yield_pct,
           actionable_entry_signals_today: candidates.filter(c => c.signal_tier === 'ACTIONABLE_ENTRY').length,
           caution_limit_signals_today: candidates.filter(c => c.signal_tier === 'CAUTION_ENTRY').length,
@@ -1419,62 +1485,101 @@
     }
 
     // =========================================================================
-    // EXACT STRATEGY EVALUATION & RENDERING LOGIC (100% PRESERVED)
+    // EXACT PEER-REVIEW AUDITED STRATEGY EVALUATION & RENDERING LOGIC
     // =========================================================================
-    function evaluateRowUnderMode(r, mode, maxSpread, macro, idleCap) {
+    function evaluateRowUnderMode(r, mode, maxSpread, macro, remSlotsRef) {
       if (r.window_bucket === 'EXIT_ALERT' || r.window_bucket === 'REACTING_TODAY') {
-        return { pass: true, badge: r.trading_days_to_reaction === 1 ? 'CLOSE TODAY AT EOD' : 'CLOSE NEXT SESSION', cls: 'bg-rose-500/20 text-rose-300 border-rose-500/40', weight: '0%' };
+        return { pass: true, caution: false, badge: r.trading_days_to_reaction === 1 ? 'CLOSE TODAY AT EOD' : 'CLOSE NEXT SESSION', cls: 'bg-rose-500/20 text-rose-300 border-rose-500/40', weight: '0%' };
       }
       if (r.window_bucket === 'WATCHLIST_UPCOMING') {
         const tag = r.ivr90 < 25 ? 'Core Low-IVR (<25)' : (r.ivr90 >= 50 ? 'High-IVR (>=50)' : 'Neutral IVR (25-50)');
-        return { pass: true, badge: 'WATCHLIST: ' + tag, cls: 'bg-sky-500/20 text-sky-300 border-sky-500/40', weight: 'Pending' };
+        return { pass: true, caution: false, badge: 'WATCHLIST: ' + tag, cls: 'bg-sky-500/20 text-sky-300 border-sky-500/40', weight: 'Pending' };
       }
       if (r.window_bucket !== 'ENTRY_WINDOW') {
-        return { pass: false, badge: r.signal_label, cls: 'bg-slate-800 text-slate-400 border-slate-700', weight: '-' };
+        return { pass: false, caution: false, badge: r.signal_label, cls: 'bg-slate-800 text-slate-400 border-slate-700', weight: '-' };
       }
 
-      const hs = r.half_spread_pct != null ? r.half_spread_pct : 9.99;
-      const spreadOk = hs <= maxSpread;
+      const hs = r.half_spread_pct != null ? r.half_spread_pct : null;
+      const spreadOk = hs !== null && hs <= maxSpread;
       let ivOk = false;
       let sleeveName = '';
+      let rejectReason = 'SKIP — DO NOT TRADE (IVR 25-50)';
 
-      if (mode === 'dual') {
+      if (mode === 'low_only') {
+        if (r.ivr90 < 25) { ivOk = true; sleeveName = 'CORE LOW-IVR (<25)'; }
+        else if (r.ivr90 >= 50) { rejectReason = 'SKIP — STRICT LOW-IVR (<25) MODE'; }
+      } else if (mode === 'dual') {
         if (r.ivr90 < 25) { ivOk = true; sleeveName = 'CORE CALM (<25)'; }
-        else if (r.ivr90 >= 50 && macro.post_stress_high_ivr_enabled && idleCap > 0) { ivOk = true; sleeveName = 'POST-STRESS (>=50)'; }
+        else if (r.ivr90 >= 50 && macro.post_stress_high_ivr_enabled) { ivOk = true; sleeveName = 'POST-STRESS THAW (>=50)'; }
+        else if (r.ivr90 >= 50) { rejectReason = 'BLOCKED — VIX THAW LOCKED (IVR >= 50)'; }
       } else if (mode === 'thaw_preview') {
         if (r.ivr90 < 25) { ivOk = true; sleeveName = 'CORE CALM (<25)'; }
-        else if (r.ivr90 >= 50 && idleCap > 0) { ivOk = true; sleeveName = 'POST-STRESS PREVIEW (>=50)'; }
-      } else if (mode === 'low_only') {
-        if (r.ivr90 < 25) { ivOk = true; sleeveName = 'CORE LOW-IVR (<25)'; }
+        else if (r.ivr90 >= 50) { ivOk = true; sleeveName = 'THAW PREVIEW (>=50)'; }
       } else if (mode === 'high_only') {
         if (r.ivr90 >= 50) { ivOk = true; sleeveName = 'HIGH-IVR (>=50)'; }
+        else { rejectReason = 'SKIP — BELOW IVR 50'; }
       } else {
-        ivOk = true; sleeveName = 'UNFILTERED';
+        ivOk = true; sleeveName = 'UNFILTERED >$10B';
       }
 
       if (!ivOk) {
-        const why = r.ivr90 >= 50 ? 'BLOCKED — CIRCUIT-BREAKER (IVR >= 50)' : 'SKIP — DO NOT TRADE (IVR 25-50)';
-        return { pass: false, badge: why, cls: 'bg-slate-800 text-slate-400 border-slate-700', weight: '0% (Rejected)' };
+        return { pass: false, caution: false, badge: rejectReason, cls: 'bg-slate-800 text-slate-400 border-slate-700', weight: '0% (Rejected)' };
+      }
+      const usesSlotCap = (mode === 'low_only' || mode === 'dual' || mode === 'thaw_preview');
+      if (usesSlotCap && remSlotsRef && remSlotsRef.slots <= 0) {
+        return { pass: false, caution: false, badge: 'BLOCKED — 10 SLOTS FULL', cls: 'bg-slate-800 text-slate-400 border-slate-700', weight: '0% (Slots Full)' };
       }
       if (!r.opt_matched) {
-        return { pass: false, badge: 'NO 90D OPTION QUOTE', cls: 'bg-slate-800 text-slate-400 border-slate-700', weight: '0%' };
+        return { pass: false, caution: false, badge: 'NO 60-135D OPTION QUOTE', cls: 'bg-slate-800 text-slate-400 border-slate-700', weight: '0%' };
       }
       if (!spreadOk) {
-        return { pass: true, caution: true, badge: 'LIMIT ONLY (' + sleeveName + ')', cls: 'bg-amber-500/20 text-amber-300 border-amber-500/40', weight: '5% (Strict Limit)' };
+        return { pass: false, caution: true, badge: `REJECTED SPREAD > ${maxSpread.toFixed(2)}% (${sleeveName})`, cls: 'bg-amber-500/20 text-amber-300 border-amber-500/40', weight: '0% (Spread Cap)' };
       }
-      return { pass: true, caution: false, badge: 'SELL 3M PUT (' + sleeveName + ')', cls: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40', weight: '10% Cash-Secured' };
+      if (usesSlotCap && remSlotsRef && r.trading_days_to_reaction === 20) {
+        remSlotsRef.slots = Math.max(0, remSlotsRef.slots - 1);
+      }
+      const daySuffix = r.trading_days_to_reaction === 20 ? '' : ` • D-${r.trading_days_to_reaction}`;
+      return { pass: true, caution: false, badge: `SELL 3M PUT (${sleeveName}${daySuffix})`, cls: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40', weight: '10% Cash-Secured' };
+    }
+
+    function getBenchmarkCardForMode(mode) {
+      if (mode === 'low_only') {
+        return {
+          title: 'Audited Benchmark (Optimal 10-Slot)',
+          main: '+7.72% OOS <span class="text-xs font-normal text-emerald-400">0.55 Shp</span>',
+          sub: '10Y Net +6.24% (0.54 Shp) • MaxDD -7.23% OOS / -13.37% 10Y'
+        };
+      }
+      if (mode === 'dual' || mode === 'thaw_preview') {
+        return {
+          title: 'Audited Dual-Sleeve (25-Slot / 10-Slot)',
+          main: '+6.18% OOS <span class="text-xs font-normal text-emerald-400">0.48 10Y Shp</span>',
+          sub: '10Y Net +5.41% (10-Slot: +6.40% OOS) • MaxDD -8.26% OOS'
+        };
+      }
+      if (mode === 'high_only') {
+        return {
+          title: 'Audited High-IVR (>=50) Single-Trade',
+          main: '+0.75% Net <span class="text-xs font-normal text-emerald-400">66.8% Win</span>',
+          sub: 'Mid +0.98%/Trade • Standalone 10Y +1.93% (-29.3% DD)'
+        };
+      }
+      return {
+        title: 'Audited Unfiltered >$10B Baseline',
+        main: '+3.64% 10Y <span class="text-xs font-normal text-rose-400">-1.06% OOS</span>',
+        sub: 'Mid +6.94% • Resized OOS Sharpe -0.40 • MaxDD -31.39%'
+      };
     }
 
     function renderAll() {
       if (!DATA) return;
       const m = DATA.macro_regime;
-      const cap = DATA.portfolio_capacity;
       const mode = document.getElementById('modeSelect').value;
       const minMcap = parseFloat(document.getElementById('minMcapFilter').value || '10');
       const maxSpread = parseFloat(document.getElementById('maxSpreadInput').value || '0.35');
       const q = (document.getElementById('searchTicker').value || '').trim().toUpperCase();
 
-      document.getElementById('asOfBadge').textContent = `Calendar Ref: ${m.as_of_date} | Option Quotes: ${DATA.signals[0]?.quote_date || m.vix_quote_date} | Updated: ${DATA.generated_at}`;
+      document.getElementById('asOfBadge').textContent = `Calendar Ref: ${m.as_of_date} | Prior VIX Close: ${m.vix_quote_date} | Quotes: ${DATA.signals[0]?.quote_date || m.vix_quote_date} | Updated: ${DATA.generated_at}`;
 
       let bannerStyle = 'border-teal-500/40 bg-teal-950/30';
       let pillStyle = 'bg-teal-500/20 text-teal-300 border-teal-500/40';
@@ -1490,46 +1595,69 @@
         <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
           <div class="flex items-center gap-3 flex-wrap">
             <span class="px-2.5 py-1 text-xs font-bold rounded-md border ${pillStyle}">${m.regime_label}</span>
-            <span class="text-xs text-slate-300 mono">VIX: <b>${m.vix_close}</b> (10D Avg ${m.vix_sma10} vs 30D Avg ${m.vix_sma30} | 20D High ${m.vix_high20}) &bull; VIX3M Rank: <b>${m.vix3m_ivr_52w}</b></span>
+            <span class="text-xs text-slate-300 mono">Prior VIX (${m.vix_quote_date}): <b>${m.vix_close}</b> (10D Avg ${m.vix_sma10} vs 30D Avg ${m.vix_sma30} | 20D High ${m.vix_high20}) &bull; VIX3M Rank: <b>${m.vix3m_ivr_52w}</b></span>
           </div>
           <div class="text-xs text-slate-300 mono">3M US Treasury Collateral Yield: <b class="text-emerald-300">${m.tbill_3m_yield_pct}%</b></div>
         </div>
         <p class="text-xs text-slate-300 mt-2 leading-relaxed">${m.regime_guidance}</p>
       `;
 
+      const allCohort2to19 = DATA.signals.filter(r => r.trading_days_to_reaction >= 2 && r.trading_days_to_reaction <= 19 && r.market_cap_b >= minMcap);
+      const nCoreAct = Math.min(10, allCohort2to19.filter(r => r.ivr90 < 28.0).length);
+      const nThawAct = ((mode === 'dual' && Boolean(m.recent_thaw_18d)) || mode === 'thaw_preview')
+        ? Math.min(Math.max(0, 10 - nCoreAct), allCohort2to19.filter(r => r.ivr90 >= 45.0).length)
+        : 0;
+      const nActSlots = mode === 'low_only' ? nCoreAct : Math.min(10, nCoreAct + nThawAct);
+      const allocPct = Math.min(100, nActSlots * 10);
+      const idlePct = Math.max(0, 100 - allocPct);
+      const remSlotsRef = { slots: Math.max(0, 10 - nActSlots) };
+
       const rows = DATA.signals.filter(r => r.market_cap_b >= minMcap && (!q || r.symbol.includes(q) || r.company_name.toUpperCase().includes(q)));
-      const entryRowsAll = rows.filter(r => r.window_bucket === 'ENTRY_WINDOW');
-      const evaluatedEntries = entryRowsAll.map(r => ({ r, ev: evaluateRowUnderMode(r, mode, maxSpread, m, cap.available_idle_capacity_pct) }));
+      const entryRowsAll = rows.filter(r => r.window_bucket === 'ENTRY_WINDOW').slice().sort((a, b) => {
+        const exA = a.trading_days_to_reaction === 20 ? 0 : 1;
+        const exB = b.trading_days_to_reaction === 20 ? 0 : 1;
+        if (exA !== exB) return exA - exB;
+        const slA = a.ivr90 < 25 ? 0 : (a.ivr90 >= 50 ? 1 : 2);
+        const slB = b.ivr90 < 25 ? 0 : (b.ivr90 >= 50 ? 1 : 2);
+        if (slA !== slB) return slA - slB;
+        const hsA = a.half_spread_pct != null ? a.half_spread_pct : 99.0;
+        const hsB = b.half_spread_pct != null ? b.half_spread_pct : 99.0;
+        if (hsA !== hsB) return hsA - hsB;
+        return b.market_cap_b - a.market_cap_b;
+      });
+
+      const evaluatedEntries = entryRowsAll.map(r => ({ r, ev: evaluateRowUnderMode(r, mode, maxSpread, m, remSlotsRef) }));
       const actionableCount = evaluatedEntries.filter(x => x.ev.pass && !x.ev.caution).length;
-      const limitCount = evaluatedEntries.filter(x => x.ev.pass && x.ev.caution).length;
+      const spreadRejectedCount = evaluatedEntries.filter(x => x.ev.caution).length;
       const exitRows = rows.filter(r => r.window_bucket === 'EXIT_ALERT');
       const watchRows = rows.filter(r => r.window_bucket === 'WATCHLIST_UPCOMING');
+      const bmCard = getBenchmarkCardForMode(mode);
 
       document.getElementById('kpiGrid').innerHTML = `
         <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5">
           <div class="text-xs text-slate-400">Actionable Day -20 Entries</div>
-          <div class="text-2xl font-bold text-emerald-400 mono mt-1">${actionableCount} <span class="text-xs font-normal text-amber-300">(+${limitCount} Limit)</span></div>
-          <div class="text-[11px] text-slate-500 mt-0.5">Out of ${entryRowsAll.length} &gt;$${minMcap}B Day -20 names</div>
+          <div class="text-2xl font-bold text-emerald-400 mono mt-1">${actionableCount} <span class="text-xs font-normal text-amber-300">(${spreadRejectedCount} Spread &gt; Cap)</span></div>
+          <div class="text-[11px] text-slate-500 mt-0.5">Out of ${entryRowsAll.length} &gt;$${minMcap}B Day -19..-21 names</div>
         </div>
         <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5">
           <div class="text-xs text-slate-400">Mandatory Day -1 / -2 Exits</div>
           <div class="text-2xl font-bold text-rose-400 mono mt-1">${exitRows.length}</div>
-          <div class="text-[11px] text-slate-500 mt-0.5">Close before earnings reaction</div>
+          <div class="text-[11px] text-slate-500 mt-0.5">Close EOD Day -1 before reaction</div>
         </div>
         <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5">
-          <div class="text-xs text-slate-400">Core Sleeve Occupancy</div>
-          <div class="text-2xl font-bold text-sky-400 mono mt-1">${cap.estimated_core_allocation_pct}% <span class="text-xs font-normal text-slate-400">(${cap.estimated_active_core_positions}/10 slots)</span></div>
-          <div class="text-[11px] text-slate-500 mt-0.5">${cap.available_idle_capacity_pct}% idle capacity available</div>
+          <div class="text-xs text-slate-400">Fixed-Slot Occupancy (D-2..D-19)</div>
+          <div class="text-2xl font-bold text-sky-400 mono mt-1">${allocPct}% <span class="text-xs font-normal text-slate-400">(${nActSlots}/10 slots)</span></div>
+          <div class="text-[11px] text-slate-500 mt-0.5">${idlePct}% idle in 3M T-Bills (${Math.max(0, 10 - nActSlots)} open slots)</div>
         </div>
         <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5">
-          <div class="text-xs text-slate-400">Upcoming Watchlist (1–5d)</div>
+          <div class="text-xs text-slate-400">Upcoming Watchlist (D-22..D-27)</div>
           <div class="text-2xl font-bold text-indigo-400 mono mt-1">${watchRows.length}</div>
           <div class="text-[11px] text-slate-500 mt-0.5">Approaching Day -20 entry</div>
         </div>
         <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5">
-          <div class="text-xs text-slate-400">10Y Strategy Benchmark</div>
-          <div class="text-2xl font-bold text-white mono mt-1">+10.24% <span class="text-xs font-normal text-emerald-400">0.88 Shp</span></div>
-          <div class="text-[11px] text-slate-500 mt-0.5">MaxDD -11.11% vs SPY -34.10%</div>
+          <div class="text-xs text-slate-400">${bmCard.title}</div>
+          <div class="text-2xl font-bold text-white mono mt-1">${bmCard.main}</div>
+          <div class="text-[11px] text-slate-500 mt-0.5">${bmCard.sub}</div>
         </div>
       `;
 
@@ -1558,13 +1686,23 @@
 
       let displayList = [];
       if (CURRENT_TAB === 'entries') {
-        displayList = evaluatedEntries.sort((a, b) => (b.ev.pass - a.ev.pass) || ((a.ev.caution?1:0) - (b.ev.caution?1:0)) || (b.r.market_cap_b - a.r.market_cap_b));
+        displayList = evaluatedEntries.sort((a, b) =>
+          ((b.ev.pass ? 1 : 0) - (a.ev.pass ? 1 : 0)) ||
+          ((b.ev.caution ? 1 : 0) - (a.ev.caution ? 1 : 0)) ||
+          (Math.abs(a.r.trading_days_to_reaction - 20) - Math.abs(b.r.trading_days_to_reaction - 20)) ||
+          (b.r.market_cap_b - a.r.market_cap_b)
+        );
       } else if (CURRENT_TAB === 'exits') {
-        displayList = exitRows.map(r => ({ r, ev: evaluateRowUnderMode(r, mode, maxSpread, m, cap.available_idle_capacity_pct) }));
+        displayList = exitRows.map(r => ({ r, ev: evaluateRowUnderMode(r, mode, maxSpread, m, null) }));
       } else if (CURRENT_TAB === 'watchlist') {
-        displayList = watchRows.map(r => ({ r, ev: evaluateRowUnderMode(r, mode, maxSpread, m, cap.available_idle_capacity_pct) }));
+        displayList = watchRows.map(r => ({ r, ev: evaluateRowUnderMode(r, mode, maxSpread, m, null) }));
       } else {
-        displayList = rows.filter(r => r.window_bucket === 'ACTIVE_COHORT').map(r => ({ r, ev: { pass: true, badge: `HOLD (Exit ${r.scheduled_exit_date})`, cls: 'bg-slate-800 text-slate-300 border-slate-700', weight: r.ivr90 < 28 ? '10% Core' : '-' } }));
+        displayList = rows.filter(r => r.window_bucket === 'ACTIVE_COHORT').map(r => {
+          const heldCore = r.ivr90 < 28;
+          const heldThaw = ((mode === 'dual' && Boolean(m.recent_thaw_18d)) || mode === 'thaw_preview') && r.ivr90 >= 45;
+          const wtLabel = heldCore ? '10% Core (Fixed)' : (heldThaw ? '10% Thaw (Fixed)' : '-');
+          return { r, ev: { pass: true, caution: false, badge: `HOLD UNTOUCHED (Exit ${r.scheduled_exit_date})`, cls: 'bg-slate-800 text-slate-300 border-slate-700', weight: wtLabel } };
+        });
       }
 
       if (!displayList.length) {
@@ -1663,7 +1801,7 @@
         if (!/^\d{4}-\d{2}-\d{2}$/.test(expS)) continue;
         const dExp = parseDateUTC(expS);
         const dteV = Math.round((dExp.getTime() - todayDt.getTime()) / 86400000);
-        if (dteV < 55 || dteV > 135) continue;
+        if (dteV < 60 || dteV > 135) continue;
         const ks = Number(item.price_strike ?? item.strike);
         if (!Number.isFinite(ks) || ks <= 0 || !Number.isFinite(refSpot) || refSpot <= 0) continue;
         const relM = Math.abs(ks - refSpot) / refSpot;
@@ -1928,7 +2066,7 @@
               if (!/^\d{4}-\d{2}-\d{2}$/.test(expS)) continue;
               const dExp = parseDateUTC(expS);
               const dteV = Math.round((dExp.getTime() - todayDt.getTime()) / 86400000);
-              if (dteV < 55 || dteV > 135) continue;
+              if (dteV < 60 || dteV > 135) continue;
               const ks = Number(d.strike);
               if (!Number.isFinite(ks) || ks <= 0) continue;
               const relM = Math.abs(ks - liveSpot) / liveSpot;

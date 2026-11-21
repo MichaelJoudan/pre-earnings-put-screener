@@ -1,6 +1,11 @@
 """
-Portable Portfolio-Level Pre-Earnings Short 3-Month Put Signal Scanner.
-Zero external workspace dependencies — runs identically on any computer.
+Portable & Cloud Portfolio-Level Pre-Earnings Short 3-Month Put Signal Scanner.
+Post-Peer-Review Audited Edition:
+  - Default Strategy Mode: Strict Core Low-IVR < 25 Fixed-Slot Buy-and-Hold (+7.72% OOS / +6.24% 10Y Net CAGR, 0.55 OOS Sharpe, -7.23% OOS MaxDD)
+  - Optional Dual-Sleeve Calendar Mode: Core < 25 + Post-Stress Thaw >= 50 (+6.18% OOS / +5.41% 10Y Net CAGR at 25 Slots)
+  - Strictly Causal Prior-Session (Day -21) CBOE VIX Regime Gating (eliminates 4:15 PM VIX vs. 4:00 PM Option Close leak)
+  - Uniform >= 10,000 Underlying Option Open Interest Floor, ADR Ordinary-Share Inflation Cross-Check, 60-135 DTE & <= 0.35% Half-Spread Cap
+  - True Non-Resized Fixed-Slot Buy-and-Hold Capacity Accounting (zero mid-hold resizing turnover)
 """
 from __future__ import annotations
 
@@ -32,7 +37,67 @@ SCREENER_OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 SECONDARY_SHARE_CLASSES = {
     "GOOG", "BRK/A", "BRK.A", "FOX", "PBR/A", "PBR.A",
-    "BBL", "RDS/B", "RDS.B", "NWS", "UA", "Z", "HEI/A",
+    "BBL", "RDS/B", "RDS.B", "NWS", "UA", "Z",
+    "HEI/A", "HEI.A", "LEN/B", "LEN.B", "BF/A", "BF.A",
+    "UHAL/B", "UHAL.B", "CWEN/A", "CWEN.A", "BIO/B", "BIO.B",
+    "TAP/A", "TAP.A", "MOG/A", "MOG.A", "WSO/B", "WSO.B",
+}
+
+AUDITED_BENCHMARKS_10Y: dict[str, Any] = {
+    "core_low_ivr_only": {
+        "name": "Strict Core Low-IVR < 25 Fixed-Slot Buy-and-Hold (Optimal 10-Slot, Audited)",
+        "cagr_10y_net": 6.24,
+        "sharpe_10y_net": 0.54,
+        "max_dd_10y_pct": -13.37,
+        "cagr_oos_net": 7.72,
+        "excess_cagr_oos_net": 3.65,
+        "sharpe_oos_net": 0.55,
+        "max_dd_oos_pct": -7.23,
+        "spy_beta": 0.25,
+    },
+    "dual_sleeve_calendar_strategy": {
+        "name": "Dual-Sleeve Fixed-Slot Buy-and-Hold (Optimal 25-Slot Diversified, Audited)",
+        "cagr_10y_net": 5.41,
+        "cagr_10y_fixed10_net": 5.04,
+        "cagr_10y_rebal_net": 3.84,
+        "cagr_10y_mid": 6.90,
+        "sharpe_10y_net": 0.48,
+        "sharpe_10y_fixed10_net": 0.34,
+        "max_dd_10y_pct": -10.40,
+        "cagr_oos_net": 6.18,
+        "cagr_oos_fixed10_net": 6.40,
+        "sharpe_oos_net": 0.37,
+        "max_dd_oos_pct": -8.26,
+        "spy_beta": 0.22,
+    },
+    "high_ivr_single_trade": {
+        "name": "High Starting Volatility Only (3M IV Rank >= 50, Audited)",
+        "mean_pnl_mid_pct": 0.98,
+        "mean_pnl_net25_pct": 0.75,
+        "win_rate_net25_pct": 66.83,
+        "cagr_10y_net": 1.93,
+        "sharpe_10y_net": 0.00,
+        "max_dd_10y_pct": -29.30,
+    },
+    "unfiltered_baseline": {
+        "name": "Unfiltered > $10B Baseline (All Trades, Audited)",
+        "cagr_10y_mid": 6.94,
+        "cagr_10y_entryexit_net": 3.64,
+        "cagr_10y_rebal_net": 0.86,
+        "cagr_oos_rebal_net": -1.06,
+        "sharpe_10y_rebal_net": -0.09,
+        "sharpe_oos_rebal_net": -0.40,
+        "max_dd_10y_pct": -31.39,
+        "spy_beta": 0.54,
+    },
+    "spy_total_return": {
+        "cagr_10y": 15.14,
+        "sharpe_10y": 0.74,
+        "max_dd_10y_pct": -33.72,
+        "cagr_oos": 11.58,
+        "sharpe_oos": 0.50,
+        "max_dd_oos_pct": -24.50,
+    },
 }
 
 
@@ -112,27 +177,43 @@ def build_nyse_trading_days(start_dt: date, end_dt: date) -> list[str]:
 
 
 def fetch_macro_regime(as_of_str: str, vix_spike_thresh: float = 24.0) -> dict[str, Any]:
+    """
+    Compute causal Portfolio-Calendar Macro Regime from CBOE VIX, VIX3M, 3M T-Bill (^IRX), and SPY.
+    Strictly causal alignment: CBOE VIX settles at 4:15 PM ET (15 minutes after 4:00 PM ET single-stock
+    option close), so Day -20 gating evaluates VIX SMA10, SMA30, and 20D High strictly on completed
+    prior trading sessions (`vs.index < as_of_str`), matching the audited contract-level validation engine.
+    """
     end_dt = (datetime.strptime(as_of_str, "%Y-%m-%d").date() + timedelta(days=2)).strftime("%Y-%m-%d")
     start_dt = (datetime.strptime(as_of_str, "%Y-%m-%d").date() - timedelta(days=400)).strftime("%Y-%m-%d")
 
-    vix_close, vix_sma10, vix_sma30, vix_hi20 = 18.5, 18.5, 18.5, 20.0
+    vix_close, vix_live_close, vix_sma10, vix_sma30, vix_hi20 = 18.5, 18.5, 18.5, 18.5, 20.0
     vix3m_close, vix3m_ivr = 20.0, 30.0
     tbill_yield_pct = 4.25
     spy_close, spy_sma200 = 580.0, 540.0
     vix_date = as_of_str
+    recent_thaw_18d = False
 
     try:
         vix_df = yf.Ticker("^VIX").history(start=start_dt, end=end_dt)
         if vix_df is not None and not vix_df.empty:
             vs = pd.Series(vix_df["Close"].values, index=pd.to_datetime(vix_df.index).strftime("%Y-%m-%d"))
-            vs = vs[~vs.index.duplicated(keep="last")]
-            vs = vs[vs.index <= as_of_str]
-            if not vs.empty:
-                vix_date = str(vs.index[-1])
-                vix_close = float(vs.iloc[-1])
-                vix_sma10 = float(vs.tail(10).mean())
-                vix_sma30 = float(vs.tail(30).mean())
-                vix_hi20 = float(vs.tail(20).max())
+            vs = vs[~vs.index.duplicated(keep="last")].dropna()
+            vs_le = vs[vs.index <= as_of_str]
+            if not vs_le.empty:
+                vix_live_close = float(vs_le.iloc[-1])
+            vs_prior = vs[vs.index < as_of_str]
+            if vs_prior.empty:
+                vs_prior = vs_le
+            if not vs_prior.empty:
+                vix_date = str(vs_prior.index[-1])
+                vix_close = float(vs_prior.iloc[-1])
+                vix_sma10 = float(vs_prior.tail(10).mean())
+                vix_sma30 = float(vs_prior.tail(30).mean())
+                vix_hi20 = float(vs_prior.tail(20).max())
+                s10_s = vs_prior.rolling(10, min_periods=10).mean()
+                s30_s = vs_prior.rolling(30, min_periods=30).mean()
+                hi20_s = vs_prior.rolling(20, min_periods=20).max()
+                recent_thaw_18d = bool(((hi20_s > vix_spike_thresh) & (s10_s < s30_s)).tail(18).any())
     except Exception as exc:
         logger.warning("VIX fetch warning: %s", exc)
 
@@ -140,12 +221,14 @@ def fetch_macro_regime(as_of_str: str, vix_spike_thresh: float = 24.0) -> dict[s
         v3_df = yf.Ticker("^VIX3M").history(start=start_dt, end=end_dt)
         if v3_df is not None and not v3_df.empty:
             v3 = pd.Series(v3_df["Close"].values, index=pd.to_datetime(v3_df.index).strftime("%Y-%m-%d"))
-            v3 = v3[~v3.index.duplicated(keep="last")]
-            v3 = v3[v3.index <= as_of_str]
-            if not v3.empty:
-                vix3m_close = float(v3.iloc[-1])
-                lo252 = float(v3.tail(252).min())
-                hi252 = float(v3.tail(252).max())
+            v3 = v3[~v3.index.duplicated(keep="last")].dropna()
+            v3_prior = v3[v3.index < as_of_str]
+            if v3_prior.empty:
+                v3_prior = v3[v3.index <= as_of_str]
+            if not v3_prior.empty:
+                vix3m_close = float(v3_prior.iloc[-1])
+                lo252 = float(v3_prior.tail(252).min())
+                hi252 = float(v3_prior.tail(252).max())
                 vix3m_ivr = float(100.0 * (vix3m_close - lo252) / max(hi252 - lo252, 1e-6))
     except Exception:
         pass
@@ -174,26 +257,27 @@ def fetch_macro_regime(as_of_str: str, vix_spike_thresh: float = 24.0) -> dict[s
 
     if is_panic:
         regime_code = "PANIC_CIRCUIT_BREAKER"
-        regime_label = "Active Market Stress — Circuit-Breaker Engaged"
+        regime_label = "Active Market Stress — High-IVR Circuit-Breaker Engaged"
         regime_guidance = (
-            "Market volatility spiked above the 24.0 VIX stress threshold and remains elevated (10-day VIX average >= 30-day average). "
-            "High-volatility entries are BLOCKED; only Core Low-IVR (< 25) names qualify, idle portfolio slots remain parked in 3-Month US Treasury Bills, "
-            "and existing open positions are held calmly until their scheduled Day -1 pre-earnings exit."
+            "Prior-session VIX spiked above the 24.0 stress threshold and remains elevated (10-day VIX SMA >= 30-day SMA). "
+            "High-volatility (>= 50 IVR) entries are LOCKED; Core Low-IVR (< 25, <= 0.35% half-spread) Fixed-Slot entries remain "
+            "eligible up to the 10-slot cap, idle slots earn 3-Month US Treasury Bills, and open positions hold calmly to Day -1."
         )
     elif is_thaw:
         regime_code = "POST_STRESS_THAW"
-        regime_label = "Post-Stress Volatility Thaw — Dual-Sleeve Unlocked"
+        regime_label = "Post-Stress Volatility Thaw — Calm Core Active (Thaw Available in Dual Mode)"
         regime_guidance = (
-            "Market volatility recently exceeded 24.0 VIX (20-day peak) and is now subsiding (10-day VIX average < 30-day average). "
-            "Both the Core Calm Sleeve (3M IV Rank < 25) AND the Opportunistic Post-Stress Mean-Reversion Sleeve (3M IV Rank >= 50) "
-            "are UNLOCKED for idle portfolio capacity."
+            "Prior-session VIX exceeded 24.0 (20-day peak) and is now subsiding (10-day VIX SMA < 30-day SMA). "
+            "Default Optimal 10-Slot Mode deploys strictly into Core Low-IVR (< 25, <= 0.35% half-spread); switching to "
+            "25-Slot Dual-Sleeve Mode additionally unlocks Post-Stress High-IVR (>= 50) candidates for remaining idle slots."
         )
     else:
         regime_code = "CALM_HARVEST"
-        regime_label = "Calm Market Harvest — Core Low-IVR Sleeve Active"
+        regime_label = "Calm Market Harvest — Core Low-IVR (< 25) Sleeve Active"
         regime_guidance = (
-            "Broad equity volatility is calm (20-day VIX peak <= 24.0). Deploy strictly into Core Low-Volatility candidates "
-            "(Starting 3M IV Rank < 25) entering Day -20 before earnings while earning 3-Month Treasury yield on unused cash."
+            "Broad equity volatility is calm (prior-session 20-day VIX peak <= 24.0). Deploy Fixed Buy-and-Hold slots strictly "
+            "into Core Low-Volatility candidates (Starting 3M IV Rank < 25, <= 0.35% half-spread) entering Day -20 before earnings "
+            "and hold untouched to Day -1 while earning 3-Month Treasury yield on idle slots."
         )
 
     return {
@@ -203,6 +287,7 @@ def fetch_macro_regime(as_of_str: str, vix_spike_thresh: float = 24.0) -> dict[s
         "regime_label": regime_label,
         "regime_guidance": regime_guidance,
         "vix_close": round(vix_close, 2),
+        "vix_live_close": round(vix_live_close, 2),
         "vix_sma10": round(vix_sma10, 2),
         "vix_sma30": round(vix_sma30, 2),
         "vix_high20": round(vix_hi20, 2),
@@ -215,6 +300,7 @@ def fetch_macro_regime(as_of_str: str, vix_spike_thresh: float = 24.0) -> dict[s
         "spy_above_sma200": bool(spy_close >= spy_sma200),
         "core_sleeve_enabled": True,
         "post_stress_high_ivr_enabled": bool(is_thaw),
+        "recent_thaw_18d": bool(recent_thaw_18d),
     }
 
 
@@ -297,7 +383,7 @@ def _load_latest_ivol_universe(client: IVolClient, as_of_dt: date) -> tuple[str,
     return smd_date, smd, common_stocks
 
 
-def _select_best_90d_atm_put(client: IVolClient, symbol: str, quote_date: str, fallback_spot: float) -> dict[str, Any]:
+def _select_best_90d_atm_put(client: IVolClient, symbol: str, quote_date: str, fallback_spot: float, ivx90_ref: float = 35.0) -> dict[str, Any]:
     empty_res = {
         "opt_matched": False, "option_symbol": "", "expiration_date": "", "dte": None,
         "strike": None, "bid": None, "ask": None, "mid": None, "limit_25_price": None,
@@ -328,7 +414,7 @@ def _select_best_90d_atm_put(client: IVolClient, symbol: str, quote_date: str, f
         spot = float(r["underlying_price"]) if pd.notna(r.get("underlying_price")) and float(r["underlying_price"]) > 0 else fallback_spot
         ks = float(r["price_strike"]) if pd.notna(r.get("price_strike")) else np.nan
         dte_v = int(r["dte"]) if pd.notna(r.get("dte")) else 0
-        if pd.isna(spot) or spot <= 0 or pd.isna(ks) or ks <= 0 or not (55 <= dte_v <= 135):
+        if pd.isna(spot) or spot <= 0 or pd.isna(ks) or ks <= 0 or not (60 <= dte_v <= 135):
             continue
         rel_m = abs(ks - spot) / spot
         if rel_m > 0.12:
@@ -336,6 +422,12 @@ def _select_best_90d_atm_put(client: IVolClient, symbol: str, quote_date: str, f
         bb, aa, mm, _ok = clean_option_quote(r.get("Bid", np.nan), r.get("Ask", np.nan), r.get("price", np.nan))
         if pd.isna(mm) or mm <= 0:
             continue
+        iv_raw_chk = float(r["iv"]) if pd.notna(r.get("iv")) and float(r["iv"]) > 0 else np.nan
+        iv_pct_chk = iv_raw_chk * 100.0 if (pd.notna(iv_raw_chk) and iv_raw_chk < 3.0) else iv_raw_chk
+        # Ex-ante corrupt dealer quote guard (matches audited pre_earnings_engine.py)
+        if (mm / spot) > 0.25 and pd.notna(iv_pct_chk) and iv_pct_chk > 3.0 * max(ivx90_ref, 15.0):
+            continue
+
         exp_s = str(r.get("expiration_date", ""))[:10]
         try:
             d_exp = datetime.strptime(exp_s, "%Y-%m-%d").date()
@@ -381,10 +473,12 @@ def _select_best_90d_atm_put(client: IVolClient, symbol: str, quote_date: str, f
 def run_portfolio_signal_scan(
     as_of_date: str | None = None,
     min_market_cap_b: float = 10.0,
+    min_total_opt_oi: int = 10_000,
     core_ivr_max: float = 25.0,
     reversion_ivr_min: float = 50.0,
     max_half_spread_pct: float = 0.35,
     vix_spike_thresh: float = 24.0,
+    strategy_mode: str = "low_only",
     price_option_chains: bool = True,
 ) -> dict[str, Any]:
     t0 = time.time()
@@ -443,9 +537,16 @@ def run_portfolio_signal_scan(
         nasdaq_mc = _parse_nasdaq_mcap(er.get("marketCap"))
         ivol_mc = float(smd_row.get("marketCap", 0) or 0)
         best_mc = ivol_mc if (ivol_mc >= 1e8 and not pd.isna(ivol_mc)) else nasdaq_mc
+        # Guard against ADR ordinary-share ratio inflation (e.g. YMM, BCH, BSAC, EC)
+        if nasdaq_mc >= 1e8 and ivol_mc > 3.0 * nasdaq_mc:
+            best_mc = nasdaq_mc
         if nasdaq_mc >= 1e9 and ivol_mc <= 0:
             best_mc = nasdaq_mc
         if best_mc < min_mc_usd:
+            continue
+
+        total_opt_oi = int(float(smd_row.get("openInterest", 0) or 0))
+        if total_opt_oi < min_total_opt_oi:
             continue
 
         ivx90 = float(smd_row.get("ivx90", np.nan))
@@ -492,14 +593,14 @@ def run_portfolio_signal_scan(
             window_bucket = "REACTING_TODAY"
         elif td_to_reaction in (1, 2):
             window_bucket = "EXIT_ALERT"
-        elif 18 <= td_to_reaction <= 22:
+        elif 19 <= td_to_reaction <= 21:
             window_bucket = "ENTRY_WINDOW"
-        elif 23 <= td_to_reaction <= 27:
+        elif 22 <= td_to_reaction <= 27:
             window_bucket = "WATCHLIST_UPCOMING"
         else:
             window_bucket = "ACTIVE_COHORT"
 
-        norm90 = float(norm_ivr90_map.get(ivol_sym, 27.3))
+        norm90 = float(norm_ivr90_map.get(ivol_sym, 27.5))
         excess_norm90 = float(ivr90 - norm90)
 
         candidates.append({
@@ -525,23 +626,38 @@ def run_portfolio_signal_scan(
             "ivp90": round(float(smd_row.get("ivp90", np.nan)), 1) if pd.notna(smd_row.get("ivp90")) else None,
             "norm_ivr90_baseline": round(norm90, 1),
             "ivr90_excess_vs_norm": round(excess_norm90, 1),
-            "total_opt_oi": int(float(smd_row.get("openInterest", 0) or 0)),
+            "total_opt_oi": total_opt_oi,
             "eps_forecast": str(er.get("epsForecast", "")).strip(),
         })
 
-    active_cohort = [c for c in candidates if c["window_bucket"] == "ACTIVE_COHORT"]
+    # Active open positions include Day -2..Day -19 (Day -2 is still open until tomorrow's Day -1 EOD close)
+    active_cohort = [c for c in candidates if 2 <= c["trading_days_to_reaction"] <= 19]
     est_active_core_names = [c for c in active_cohort if c["ivr90"] < (core_ivr_max + 3.0)]
-    n_core_active = len(est_active_core_names)
-    core_alloc_pct = min(100.0, n_core_active * 10.0)
+    est_active_thaw_names = (
+        [c for c in active_cohort if c["ivr90"] >= (reversion_ivr_min - 5.0)]
+        if macro.get("recent_thaw_18d", False)
+        else []
+    )
+    n_core_active = min(10, len(est_active_core_names))
+    n_thaw_active = min(max(0, 10 - n_core_active), len(est_active_thaw_names))
+    n_active_used = n_core_active if strategy_mode == "low_only" else min(10, n_core_active + n_thaw_active)
+    core_alloc_pct = min(100.0, n_active_used * 10.0)
     idle_capacity_pct = max(0.0, 100.0 - core_alloc_pct)
-    idle_slots_count = max(0, 10 - n_core_active)
+    idle_slots_count = max(0, 10 - n_active_used)
 
     chain_targets = [c for c in candidates if c["window_bucket"] in ("ENTRY_WINDOW", "WATCHLIST_UPCOMING", "EXIT_ALERT")]
     opt_results: dict[str, dict[str, Any]] = {}
     if price_option_chains and chain_targets:
         with ThreadPoolExecutor(max_workers=2) as pool:
             fmap = {
-                pool.submit(_select_best_90d_atm_put, client, c["symbol"], smd_date, c["spot_price"]): c["symbol"]
+                pool.submit(
+                    _select_best_90d_atm_put,
+                    client,
+                    c["symbol"],
+                    smd_date,
+                    c["spot_price"],
+                    float(c.get("ivx90_pct") or 35.0),
+                ): c["symbol"]
                 for c in chain_targets
             }
             for fut in as_completed(fmap):
@@ -552,13 +668,28 @@ def run_portfolio_signal_scan(
                     opt_results[sym_k] = {"opt_matched": False}
 
     for c in candidates:
-        opt_info = opt_results.get(c["symbol"], {"opt_matched": False})
-        c.update(opt_info)
+        c.update(opt_results.get(c["symbol"], {"opt_matched": False}))
+
+    # Evaluate ENTRY_WINDOW in exact causal priority order: Exact Day -20 first, Core (<25) before Thaw (>=50),
+    # narrowest half-spread first, then largest market cap (100% match to FastEntryGatedSimulator)
+    def _entry_eval_order(x: dict[str, Any]) -> tuple[int, int, int, float, float]:
+        wb_pri = 0 if x["window_bucket"] == "ENTRY_WINDOW" else 1
+        exact_pri = 0 if x["trading_days_to_reaction"] == 20 else 1
+        sleeve_pri = 0 if x["ivr90"] < core_ivr_max else (1 if x["ivr90"] >= reversion_ivr_min else 2)
+        hs_pri = float(x["half_spread_pct"]) if x.get("half_spread_pct") is not None else 99.0
+        return (wb_pri, exact_pri, sleeve_pri, hs_pri, -float(x["market_cap_b"]))
+
+    candidates.sort(key=_entry_eval_order)
+    remaining_idle_slots = int(idle_slots_count)
+    allow_thaw = (strategy_mode == "dual") and bool(macro["post_stress_high_ivr_enabled"])
+
+    for c in candidates:
         wb = c["window_bucket"]
         ivr = c["ivr90"]
         td_r = c["trading_days_to_reaction"]
         hs = c.get("half_spread_pct")
-        spread_ok = (hs is None) or (hs <= max_half_spread_pct)
+        spread_ok = (hs is not None) and (hs <= max_half_spread_pct)
+        day_tag = "Day -20" if td_r == 20 else f"Day -{td_r} Buf"
 
         if wb == "REACTING_TODAY":
             c["signal_code"] = "FLAT_EARNINGS_REACTION"
@@ -572,31 +703,50 @@ def run_portfolio_signal_scan(
             c["recommended_weight_pct"] = 0.0
         elif wb == "ENTRY_WINDOW":
             if ivr < core_ivr_max:
-                if spread_ok and c.get("opt_matched", False):
+                if remaining_idle_slots <= 0:
+                    c["signal_code"] = "BLOCKED_CAPACITY_FULL"
+                    c["signal_label"] = "BLOCKED — All 10 Portfolio Slots Occupied"
+                    c["signal_tier"] = "FILTERED_OUT"
+                    c["recommended_weight_pct"] = 0.0
+                elif spread_ok and c.get("opt_matched", False):
                     c["signal_code"] = "ENTER_CORE_SLEEVE"
-                    c["signal_label"] = "SELL 3M ATM PUT — Core Low-IVR Sleeve"
+                    c["signal_label"] = f"SELL 3M ATM PUT — Core Low-IVR < 25 ({day_tag})"
                     c["signal_tier"] = "ACTIONABLE_ENTRY"
                     c["recommended_weight_pct"] = 10.0
+                    if td_r == 20:
+                        remaining_idle_slots = max(0, remaining_idle_slots - 1)
                 else:
-                    c["signal_code"] = "LIMIT_ONLY_WIDE_SPREAD"
-                    c["signal_label"] = "LIMIT ORDER ONLY — Wide Option Spread"
+                    c["signal_code"] = "REJECTED_WIDE_SPREAD"
+                    c["signal_label"] = f"REJECTED — Spread > {max_half_spread_pct:.2f}% Cap (Core < 25)"
                     c["signal_tier"] = "CAUTION_ENTRY"
-                    c["recommended_weight_pct"] = 5.0
+                    c["recommended_weight_pct"] = 0.0
             elif ivr >= reversion_ivr_min:
-                if macro["post_stress_high_ivr_enabled"] and idle_capacity_pct > 0:
-                    if (hs is not None and hs <= (max_half_spread_pct + 0.05)) and c.get("opt_matched", False):
+                if strategy_mode == "low_only":
+                    c["signal_code"] = "SKIP_STRICT_LOW_IVR_MODE"
+                    c["signal_label"] = "SKIP — Strict Low-IVR (< 25) Mandate Active"
+                    c["signal_tier"] = "FILTERED_OUT"
+                    c["recommended_weight_pct"] = 0.0
+                elif allow_thaw and remaining_idle_slots > 0:
+                    if spread_ok and c.get("opt_matched", False):
                         c["signal_code"] = "ENTER_POST_STRESS_SLEEVE"
-                        c["signal_label"] = "SELL 3M ATM PUT — Post-Stress Mean-Reversion"
+                        c["signal_label"] = f"SELL 3M ATM PUT — Post-Stress Thaw >= 50 ({day_tag})"
                         c["signal_tier"] = "ACTIONABLE_ENTRY"
-                        c["recommended_weight_pct"] = min(10.0, idle_capacity_pct)
+                        c["recommended_weight_pct"] = 10.0
+                        if td_r == 20:
+                            remaining_idle_slots = max(0, remaining_idle_slots - 1)
                     else:
-                        c["signal_code"] = "LIMIT_ONLY_WIDE_SPREAD"
-                        c["signal_label"] = "LIMIT ORDER ONLY — Post-Stress Wide Spread"
+                        c["signal_code"] = "REJECTED_WIDE_SPREAD"
+                        c["signal_label"] = f"REJECTED — Spread > {max_half_spread_pct:.2f}% Cap (Thaw >= 50)"
                         c["signal_tier"] = "CAUTION_ENTRY"
-                        c["recommended_weight_pct"] = 5.0
+                        c["recommended_weight_pct"] = 0.0
+                elif allow_thaw and remaining_idle_slots <= 0:
+                    c["signal_code"] = "BLOCKED_CAPACITY_FULL"
+                    c["signal_label"] = "BLOCKED — All 10 Portfolio Slots Occupied"
+                    c["signal_tier"] = "FILTERED_OUT"
+                    c["recommended_weight_pct"] = 0.0
                 else:
                     c["signal_code"] = "BLOCKED_HIGH_IVR"
-                    c["signal_label"] = "BLOCKED — Circuit-Breaker Active (IVR >= 50)"
+                    c["signal_label"] = "BLOCKED — VIX Thaw Gate Locked (IVR >= 50)"
                     c["signal_tier"] = "FILTERED_OUT"
                     c["recommended_weight_pct"] = 0.0
             else:
@@ -613,21 +763,35 @@ def run_portfolio_signal_scan(
             c["signal_code"] = "ACTIVE_HOLD"
             c["signal_label"] = f"IN HOLDING WINDOW (Exit {c['scheduled_exit_date']})"
             c["signal_tier"] = "COHORT"
-            c["recommended_weight_pct"] = 10.0 if ivr < (core_ivr_max + 3.0) else 0.0
+            is_held = (ivr < (core_ivr_max + 3.0)) or (
+                strategy_mode == "dual" and macro.get("recent_thaw_18d", False) and ivr >= (reversion_ivr_min - 5.0)
+            )
+            c["recommended_weight_pct"] = 10.0 if is_held else 0.0
 
     tier_rank = {"ACTIONABLE_ENTRY": 0, "CAUTION_ENTRY": 1, "EXIT": 2, "WATCHLIST": 3, "FILTERED_OUT": 4, "COHORT": 5}
-    candidates.sort(key=lambda x: (tier_rank.get(x["signal_tier"], 9), x["trading_days_to_reaction"], -x["market_cap_b"]))
+    candidates.sort(
+        key=lambda x: (
+            tier_rank.get(x["signal_tier"], 9),
+            abs(x["trading_days_to_reaction"] - 20) if x["window_bucket"] == "ENTRY_WINDOW" else x["trading_days_to_reaction"],
+            -x["market_cap_b"],
+        )
+    )
 
     payload = {
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "scan_elapsed_sec": round(time.time() - t0, 2),
+        "default_strategy_mode": strategy_mode,
+        "backtest_benchmarks_10y": AUDITED_BENCHMARKS_10Y,
         "macro_regime": macro,
         "portfolio_capacity": {
             "active_cohort_total_gt10b": len(active_cohort),
             "estimated_active_core_positions": n_core_active,
+            "estimated_active_thaw_positions": n_thaw_active,
+            "estimated_total_active_positions": n_active_used,
             "estimated_core_allocation_pct": round(core_alloc_pct, 1),
             "available_idle_capacity_pct": round(idle_capacity_pct, 1),
             "available_idle_slots": int(idle_slots_count),
+            "remaining_idle_slots_after_today": int(remaining_idle_slots),
             "cash_collateral_tbill_yield_pct": macro["tbill_3m_yield_pct"],
             "actionable_entry_signals_today": sum(1 for c in candidates if c["signal_tier"] == "ACTIONABLE_ENTRY"),
             "caution_limit_signals_today": sum(1 for c in candidates if c["signal_tier"] == "CAUTION_ENTRY"),
